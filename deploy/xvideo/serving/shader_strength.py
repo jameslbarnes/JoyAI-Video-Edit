@@ -1,4 +1,4 @@
-"""Bounded shader-influence control. Neutral preserves the original pipeline."""
+"""Direct source/noise latent blend, matching FluxRT's strength units."""
 import math
 import threading
 
@@ -13,12 +13,11 @@ def validate_strength(value):
 
 
 class ShaderStrength:
-    # Dial percentages are normalized control values, NOT latent blend percent.
-    MAX_BLEND = .005
-    MIN_REFERENCE_GAIN = .75
+    # 0.10 means 10% source latent + 90% noise, not a remapped artistic dial.
+    # Reference conditioning remains unchanged, as in FluxRT.
     MAX_CHUNK_CHANGE = .125
 
-    def __init__(self, value=.5):
+    def __init__(self, value=0):
         self.lock = threading.Lock()
         self.current = self.target = validate_strength(value)
         self.revision = 0
@@ -44,6 +43,6 @@ class ShaderStrength:
         v = self.current
         return {'value': v, 'target': self.target, 'revision': self.revision,
                 'settled': abs(v-self.target) < 1e-9,
-                'blend': self.MAX_BLEND * max(0, 2*v-1)**2,
-                'referenceGain': 1 - (1-self.MIN_REFERENCE_GAIN) * max(0, 1-2*v),
-                'neutral': .5, 'cachePreserved': True}
+                'blend': v, 'referenceGain': 1,
+                'mode': 'direct_latent_blend',
+                'neutral': 0, 'cachePreserved': True}

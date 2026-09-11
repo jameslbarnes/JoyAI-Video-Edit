@@ -2,6 +2,9 @@
 
 ## Status
 
+Shader slider: direct FluxRT blend units (zero neutral; no .005 cap). See
+`SHADER_STRENGTH.md` for the new scale, migration and high-strength caveats.
+
 Latest continuous preset: `presets/etherea-continuous-v2.json`. The former temporal
 position limit of 128 caused long-run visual corruption; the corrected limit 8
 passed 2,049 fixed-prompt frames. Hot prompts now preserve temporal state. See

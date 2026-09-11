@@ -1,5 +1,24 @@
 # JoyAI shader influence — September 11, 2026
 
+## Direct Flux-unit slider (supersedes the mapping below)
+
+The runtime now uses `blend = value`, `referenceGain = 1`, neutral/default **0**.
+10% means a 0.10 source/noise latent blend, using the same initialization equation
+as FluxRT. The API accepts 0..1; desktop uses Flux's 0.01..0.99 range with .01
+steps, and iOS source uses Flux's 0..0.30 dial range. There is no overlay, midpoint
+remapping, or .005 cap. Output metadata identifies `mode: direct_latent_blend`.
+The .125-per-chunk smoothing and cache-preserving updates remain unchanged.
+
+This is matching units/operation, NOT matching model quality. Existing ablations
+show that .10 and above can approach raw-shader copying. Users can now explore
+that range explicitly. No new claim of Flux-equivalent output is made.
+Deploying this Python change requires a model reload and clears temporal history;
+do not reinterpret an old .85 target as .85 blend during migration. Start at zero
+or explicitly select a small direct blend after reconnecting. Zero restores the
+baseline parameters but does not erase already-generated history.
+
+The following sections record the **superseded normalized-dial experiments**.
+
 The bounded shader-influence control is now implemented in the runtime, Etherea,
 and SDK. The iOS source is updated but still requires a signed Mac/Xcode build.
 This is an experimental artistic control, not calibrated Flux-equivalent adherence.

@@ -13,23 +13,31 @@ class ShaderDialTests(unittest.TestCase):
         s = ShaderStrength()
         self.assertEqual(s.snapshot()['blend'], 0)
         self.assertEqual(s.snapshot()['referenceGain'], 1)
-        self.assertEqual(ShaderStrength(0).snapshot()['referenceGain'], .75)
-        self.assertEqual(ShaderStrength(1).snapshot()['blend'], .005)
+        self.assertEqual(ShaderStrength(0).snapshot()['referenceGain'], 1)
+        self.assertEqual(ShaderStrength(1).snapshot()['blend'], 1)
+        self.assertEqual(s.snapshot()['neutral'], 0)
+
+    def test_flux_units_are_direct_and_reference_conditioning_is_unchanged(self):
+        for value in [0, .01, .03, .1, .13, .3, .5, .99, 1]:
+            state = ShaderStrength(value).snapshot()
+            self.assertEqual(state['blend'], value)
+            self.assertEqual(state['referenceGain'], 1)
+            self.assertEqual(state['mode'], 'direct_latent_blend')
 
     def test_bounded_latest_wins(self):
         s = ShaderStrength()
         for i in range(1000): s.set(i / 999)
         self.assertEqual(s.snapshot()['revision'], 1000)
-        self.assertEqual(s.snapshot()['value'], .5)
-        self.assertEqual(s.advance()['value'], .625)
-        for _ in range(3): result = s.advance()
+        self.assertEqual(s.snapshot()['value'], 0)
+        self.assertEqual(s.advance()['value'], .125)
+        for _ in range(7): result = s.advance()
         self.assertTrue(result['settled'])
         self.assertEqual(result['target'], 1)
 
     def test_returns_to_exact_neutral_without_cache_operation(self):
         s = ShaderStrength(1)
-        s.set(.5)
-        for _ in range(4): result = s.advance()
+        s.set(0)
+        for _ in range(8): result = s.advance()
         self.assertEqual(result['blend'], 0)
         self.assertEqual(result['referenceGain'], 1)
         self.assertTrue(result['cachePreserved'])
