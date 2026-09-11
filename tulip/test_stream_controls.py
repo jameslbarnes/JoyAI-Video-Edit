@@ -46,6 +46,29 @@ def control():
 
 
 class StreamControls(unittest.TestCase):
+    def test_hot_prompt_never_captures_with_active_vae_workers(self):
+        c = control()
+        c._prompt_request = 1
+        c._prepared_prompt = (1, "new shape", torch.ones(1, 9, 2))
+        c._maybe_prepare_graph_runner = lambda: self.fail("Unsafe live graph capture")
+        profile = {}
+        c._apply_prepared_prompt(95, profile)
+        self.assertTrue(profile["prompt_graph_capture_deferred"])
+        self.assertEqual(c._prompt_revision, 1)
+        self.assertEqual(c._session_serial, 77)
+
+    def test_hot_prompt_reuses_existing_graph_without_recapture(self):
+        c = control()
+        c._prompt_request = 1
+        c._prepared_prompt = (1, "same shape", torch.ones(1, 2, 2))
+        calls = []
+        c.runtime.graph_runners["graph"] = SimpleNamespace(bind_session=lambda *args: calls.append(args))
+        c._maybe_prepare_graph_runner = lambda: self.fail("Unnecessary capture")
+        profile = {}
+        c._apply_prepared_prompt(95, profile)
+        self.assertTrue(profile["prompt_graph_reused"])
+        self.assertEqual(calls[0][0], 77)
+
     def test_continuous_preset_bounds_positions_without_periodic_reset(self):
         preset = json.loads((source.parents[3] / 'tulip/presets/etherea-continuous-v2.json').read_text())
         self.assertEqual(preset['start']['max_temporal_ids'], 8)

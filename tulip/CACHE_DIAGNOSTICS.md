@@ -20,6 +20,29 @@ reproduction, **not** as a recommended long-stream configuration.
 
 ## Verified prompt behavior
 
+### September 11 evening: hot graph-capture failure
+
+The live log reported `cudaErrorStreamCaptureUnsupported` in VAE normalization
+while a prompt update captured a new DiT graph, followed by
+`cudaErrorStreamCaptureInvalidated`. Both GPUs had about 10 GiB free; this was
+not a VRAM-allocation error. The input was also pointed at JoyAI's own sender,
+leaving a subsequent session with zero input/output frames until FLUX-IN was
+restored. The damaged CUDA service required a restart.
+
+Hot prompt application now only reuses an already-captured shape. A new shape
+runs eagerly with actual prompt embeddings and preserved KV/VAE state; it does
+not capture alongside active VAE workers. Initialization after an explicit reset
+can still capture before starting the workers. This is a conservative workaround:
+new-shape prompt updates can be slower until reset, not a claim that concurrent
+graph capture is now safe. Profile flags `prompt_graph_reused` and
+`prompt_graph_capture_deferred` expose the choice. Eight CPU control tests cover
+the no-hot-capture rule, reuse, and existing prompt/cache semantics.
+
+Recovery logs: `tulip/freeze-recovery-20260911-2335.log` and `.err.log`.
+The existing launcher remains `tulip/run-service.ps1 -Gpu 1 -TextGpu 0`.
+Model loading has a high transient host-RAM requirement; when both models are
+resident it may page heavily. Stage JoyAI loading before the Flux companion.
+
 The patched server accepts `update_prompt {prompt, request_id}` on the existing
 WebSocket. It prepares image/text conditioning on a background encoder thread,
 then applies it in the DiT worker between chunks. Latest pending request wins;

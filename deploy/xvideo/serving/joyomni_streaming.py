@@ -765,10 +765,14 @@ class JoyOmniV2VStreamingSession:
         started = time.perf_counter()
         self.streaming_cond_embeds = embeds.to(device=self.device, dtype=self.target_dtype)
         self.prompt = self.raw_prompt = prompt
-        # Variable token lengths need a new graph; keep actual embeddings, never
-        # pad unmasked tokens or truncate the operator's text to avoid capture.
-        self._maybe_prepare_graph_runner()
+        # Do not capture a new CUDA graph while the VAE workers are active.
+        # Their synchronous host/device copies can invalidate stream capture,
+        # even with thread_local capture error mode. Reuse a warm shape or run
+        # this prompt eagerly; session initialization can capture after reset.
+        # Keep real embeddings and temporal history (no padding/truncation).
         runner = self.runtime.graph_runners.get(self._graph_key())
+        profile["prompt_graph_reused"] = bool(runner is not None)
+        profile["prompt_graph_capture_deferred"] = bool(runner is None)
         if runner is not None:
             runner.bind_session(self._session_serial, self.streaming_cond_embeds)
         with self._prompt_lock:
