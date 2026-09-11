@@ -201,7 +201,8 @@ class JoyOmniRuntime:
         self.decode_vae = decode_vae or pipeline.vae
         self.pseudo_encode_vae = pseudo_encode_vae or self.decode_vae
         self.postprocess_device = postprocess_device or _module_device(self.pseudo_encode_vae)
-        self.dit_lock = threading.Lock()
+        self.dit_lock = threading.RLock()
+        self.text_lock = threading.Lock()
         self.output_quality = 60
         self.lossless_output = False
         self.graph_runners: dict[tuple, StreamingGraphRunner] = {}
@@ -518,6 +519,20 @@ class JoyOmniV2VStreamingSession:
 
         self.streaming_cond_embeds: torch.Tensor | None = None
         self.last_chunk_profile: dict[str, Any] | None = None
+        self._prompt_lock = threading.Lock()
+        self._prompt_thread = None
+        self._pending_prompt = self._prepared_prompt = None
+        self._prompt_request = self._prompt_revision = 0
+        self._prompt_status = "idle"
+        self._prompt_error = None
+        self._prompt_encode_s = 0.0
+        self._latest_source_frame = None
+        self._closing = False
+        self._sink_refresh_chunks = max(0, int(os.environ.get("JOYOMNI_SINK_REFRESH_CHUNKS", "0")))
+        self._sink_chunk = self._sink_refresh_count = 0
+        self._cache_stats = {}
+        from .shader_strength import ShaderStrength
+        self.shader_strength = ShaderStrength()
 
         self._encode_queue: queue.Queue[_ChunkJob | None] | None = None
         self._dit_queue: queue.Queue[_EncodedChunk | None] | None = None
@@ -602,6 +617,7 @@ class JoyOmniV2VStreamingSession:
     ) -> list[StreamingChunkResult]:
         self._raise_worker_error_if_needed()
         frame = self._resize_frame(frame)
+        self._latest_source_frame = frame
         meta = frame_meta or {"seq": self.chunk_idx + len(self.pending_frames) + 1, "t_capture_ms": time.time() * 1000.0}
         if not self.initialized:
             self._initialize(frame)
@@ -633,9 +649,16 @@ class JoyOmniV2VStreamingSession:
         self._raise_worker_error_if_needed()
 
     def close(self) -> None:
+        with self._prompt_lock:
+            self._closing = True
+            self._pending_prompt = self._prepared_prompt = None
+            prompt_thread = self._prompt_thread
+        if prompt_thread is not None:
+            prompt_thread.join()
+        # Drain workers before invalidating tensors they may still be using.
+        self._stop_async_workers()
         self._clear_vae_feature_caches()
         self.pipeline.transformer.reset_inference_kv_cache()
-        self._stop_async_workers()
         # No empty_cache: keep the freed KV/graph blocks cached in the allocator
         # so the next session's pools reuse them instead of fresh cudaMallocs.
 
@@ -669,20 +692,116 @@ class JoyOmniV2VStreamingSession:
 
     @torch.no_grad()
     def _encode_streaming_prompt(self, anchor_frame: Image.Image) -> None:
+        self.streaming_cond_embeds = self._encode_prompt_value(self.prompt, anchor_frame).to(self.device)
+
+    @torch.no_grad()
+    def _encode_prompt_value(self, text: str, anchor_frame: Image.Image) -> torch.Tensor:
         prompt_image = self._resize_frame(anchor_frame)
-        prompt = f"<|im_start|>user\n<image>\n{self.prompt}<|im_end|>\n"
+        prompt = f"<|im_start|>user\n<image>\n{text}<|im_end|>\n"
 
         max_sequence_length = self.settings.max_sequence_length or int(self.cfg.text_token_max_length)
-        prompt_embeds, _ = self.pipeline.encode_prompt(
-            prompt=[prompt],
-            images=[prompt_image],
-            device=self.device,
-            num_videos_per_prompt=1,
-            max_sequence_length=max_sequence_length,
-            template_type="video",
-        )
+        text_device = getattr(self.pipeline, "text_execution_device", self.device)
+        device_context = torch.cuda.device(text_device) if torch.device(text_device).type == "cuda" else nullcontext()
+        with self.runtime.text_lock, device_context:
+            prompt_embeds, _ = self.pipeline.encode_prompt(
+                prompt=[prompt], images=[prompt_image], device=text_device,
+                num_videos_per_prompt=1, max_sequence_length=max_sequence_length,
+                template_type="video",
+            )
+            # CPU handoff completes encoder work before the DiT worker sees it.
+            return prompt_embeds.detach().to("cpu")
 
-        self.streaming_cond_embeds = prompt_embeds
+    def queue_prompt(self, prompt: str) -> int:
+        prompt = prompt.strip()
+        if not prompt or len(prompt) > 12000:
+            raise ValueError("prompt must contain 1..12000 characters")
+        if not self.initialized or self._latest_source_frame is None:
+            raise ValueError("wait for the first generated frame before updating the prompt")
+        with self._prompt_lock:
+            if self._closing:
+                raise ValueError("session is closing")
+            self._prompt_request += 1
+            self._pending_prompt = (self._prompt_request, prompt, self._latest_source_frame.copy())
+            self._prepared_prompt = None
+            self._prompt_error = None
+            self._prompt_status = "encoding"
+            if self._prompt_thread is None:
+                self._prompt_thread = threading.Thread(target=self._prepare_prompt_worker,
+                                                       name="joyomni-prompt", daemon=True)
+                self._prompt_thread.start()
+            return self._prompt_request
+
+    def _prepare_prompt_worker(self):
+        while True:
+            with self._prompt_lock:
+                request = self._pending_prompt
+                self._pending_prompt = None
+                if request is None or self._closing:
+                    self._prompt_thread = None
+                    return
+            revision, prompt, anchor = request
+            started = time.perf_counter()
+            try:
+                embeds = self._encode_prompt_value(prompt, anchor)
+                with self._prompt_lock:
+                    if revision == self._prompt_request and not self._closing:
+                        self._prepared_prompt = (revision, prompt, embeds)
+                        self._prompt_encode_s = time.perf_counter() - started
+                        self._prompt_status = "prepared"
+            except Exception as exc:
+                with self._prompt_lock:
+                    if revision == self._prompt_request:
+                        self._prompt_status = "error"
+                        self._prompt_error = str(exc)
+                print(f"#####[PROMPT] encoding failed; old prompt retained: {exc!r}", flush=True)
+
+    def _apply_prepared_prompt(self, chunk_idx, profile):
+        with self._prompt_lock:
+            prepared = self._prepared_prompt
+            self._prepared_prompt = None
+            if prepared is None or prepared[0] != self._prompt_request:
+                return
+        revision, prompt, embeds = prepared
+        started = time.perf_counter()
+        self.streaming_cond_embeds = embeds.to(device=self.device, dtype=self.target_dtype)
+        self.prompt = self.raw_prompt = prompt
+        # Variable token lengths need a new graph; keep actual embeddings, never
+        # pad unmasked tokens or truncate the operator's text to avoid capture.
+        self._maybe_prepare_graph_runner()
+        runner = self.runtime.graph_runners.get(self._graph_key())
+        if runner is not None:
+            runner.bind_session(self._session_serial, self.streaming_cond_embeds)
+        with self._prompt_lock:
+            self._prompt_revision = revision
+            if revision == self._prompt_request:
+                self._prompt_status = "applied"
+        profile["prompt_apply_s"] = time.perf_counter() - started
+        print(f"#####[PROMPT] revision={revision} chunk={chunk_idx} encode={self._prompt_encode_s:.3f}s "
+              f"apply={profile['prompt_apply_s']:.3f}s cache_preserved=True", flush=True)
+
+    def _refresh_sink_and_measure(self, chunk_idx, profile):
+        store = self.pipeline.transformer._inference_kv_cache.get("cond", {})
+        interval = self._sink_refresh_chunks
+        if interval and chunk_idx > 1 and chunk_idx - self._sink_chunk >= interval:
+            current = store[self.pipeline._kv_cache_memory_id("clean", chunk_idx)]
+            # Independent storage is essential: graph publish buffers alternate
+            # and will overwrite a sink that merely aliases the current entry.
+            sink = {li: {**entry, "key": entry["key"].clone(), "value": entry["value"].clone()}
+                    for li, entry in current.items()}
+            store[self.pipeline._kv_cache_memory_id("clean", 0)] = sink
+            runner = self.runtime.graph_runners.get(self._graph_key())
+            if runner is not None:
+                runner.pool_dirty = True  # re-RoPE the refreshed sink at position 0
+            self._sink_chunk = chunk_idx
+            self._sink_refresh_count += 1
+        stats = {"entries": len(store), "sinkChunk": self._sink_chunk,
+                 "sinkRefreshes": self._sink_refresh_count, "sinkRefreshChunks": interval,
+                 "temporalPosition": profile.get("temporal_position"),
+                 "allocatedMiB": torch.cuda.memory_allocated(self.device) / 2**20,
+                 "reservedMiB": torch.cuda.memory_reserved(self.device) / 2**20}
+        self._cache_stats = stats
+        profile.update(prompt_revision=self._prompt_revision, prompt_status=self._prompt_status,
+                       prompt_error=self._prompt_error, cache=stats)
 
     @torch.no_grad()
     def _encode_ref_image_latent(self) -> torch.Tensor | None:
@@ -972,6 +1091,13 @@ class JoyOmniV2VStreamingSession:
             dtype=self.target_dtype,
         )
 
+        strength = self.shader_strength.advance()
+        profile['shader_strength'] = strength
+        if strength['blend']:
+            current_chunk_latents = torch.lerp(current_chunk_latents, ref_chunk_latent, strength['blend'])
+        if strength['referenceGain'] != 1:
+            ref_chunk_latent = ref_chunk_latent * strength['referenceGain']
+
         total_latent_frames = chunk_idx + 1
         chunk_windows = self.pipeline._get_chunk_windows(
             total_latent_frames=total_latent_frames,
@@ -1028,6 +1154,7 @@ class JoyOmniV2VStreamingSession:
             max_temporal_ids=self.settings.max_temporal_ids,
         )
         current_chunk_temporal_ids = window_ids[-self.chunk_size:]
+        profile["temporal_position"] = int(current_chunk_temporal_ids[-1])
         cached_temporal_ids = window_ids[: -self.chunk_size]
         if cached_temporal_ids.numel() == 0:
             cached_temporal_ids = None
@@ -1309,6 +1436,10 @@ class JoyOmniV2VStreamingSession:
             "frames_per_next_chunk": self.frames_per_next_chunk,
             "raw_prompt": self.raw_prompt,
             "prompt": self.prompt,
+            "prompt_control": {"requested": self._prompt_request, "applied": self._prompt_revision,
+                               "status": self._prompt_status, "error": self._prompt_error,
+                               "encode_s": self._prompt_encode_s},
+            "cache": self._cache_stats,
             "queues": {
                 "encode": self._queue_size(self._encode_queue),
                 "dit": self._queue_size(self._dit_queue),
@@ -1467,6 +1598,7 @@ class JoyOmniV2VStreamingSession:
                     )
                     with _dit_stream_ctx:
                         _consume_on_current_stream(encoded.ready_event, encoded.ref_chunk_latent)
+                        self._apply_prepared_prompt(encoded.job.chunk_idx, encoded.job.profile)
                         current_chunk_latents = self._denoise_chunk(
                             encoded.ref_chunk_latent,
                             profile=encoded.job.profile,
@@ -1477,6 +1609,7 @@ class JoyOmniV2VStreamingSession:
                             encoded.job.chunk_idx,
                             frozen_anchor_id=encoded.job.frozen_anchor_id,
                         )
+                        self._refresh_sink_and_measure(encoded.job.chunk_idx, encoded.job.profile)
                         _dit_ready = _record_ready_event()
                 self._set_debug_state("dit-denoise", "put_decode_queue", encoded.job.chunk_idx)
                 self._decode_queue.put(

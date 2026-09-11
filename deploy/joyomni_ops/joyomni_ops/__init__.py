@@ -13,7 +13,7 @@ import torch
 # The extension is a pure TORCH_LIBRARY (no pybind module init), so load the .so
 # with torch.ops.load_library to trigger op registration.
 _here = os.path.dirname(__file__)
-_so = glob.glob(os.path.join(_here, "_C*.so"))
+_so = glob.glob(os.path.join(_here, "_C*.pyd" if os.name == "nt" else "_C*.so"))
 if not _so:
     raise ImportError(f"joyomni_ops C extension not found in {_here}; build it first (pip install .)")
 torch.ops.load_library(_so[0])

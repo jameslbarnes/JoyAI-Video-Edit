@@ -101,7 +101,7 @@ nvcc_flags = [
     "-U__CUDA_NO_BFLOAT16_CONVERSIONS__",
 ] + _gencodes()
 
-cxx_flags = ["-O3", "-std=c++17"]
+cxx_flags = ["/O2", "/std:c++17"] if os.name == "nt" else ["-O3", "-std=c++17"]
 if NO_FP8:
     nvcc_flags.append("-DJOYOMNI_OPS_NO_FP8")
     cxx_flags.append("-DJOYOMNI_OPS_NO_FP8")

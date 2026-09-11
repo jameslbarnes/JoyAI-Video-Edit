@@ -1,0 +1,21 @@
+{
+  "id": "etherea-continuous-v2",
+  "baseline_preset": "etherea-coral-v1.json",
+  "validation_evidence": "tulip/evidence/position-ab-20260910/position8",
+  "source_commit": "69fdaea89e2fd7708435790d73eb30989e722a5f",
+  "model_revision": "39491dda89fd2b535777fd8644a6631ea89b857c",
+  "text_encoder_revision": "4bfb270765825d2fa059011deb4c96fdd579be6f",
+  "precision": "FP8 image/text DiT linears, BF16 activations and VAE",
+  "cuda_graphs": true,
+  "torch_compile": false,
+  "sage_attention": true,
+  "prompt": "Transform the flowing neon shapes into an intricate bioluminescent alien coral reef, with translucent organic tendrils, rich texture and cinematic depth. Preserve the source movement and composition while completely replacing the flat synthetic surfaces with detailed living forms.",
+  "start": {
+    "type": "start", "source": "live", "width": 648, "height": 360,
+    "num_inference_steps": 2, "seed": 42, "fps": 16,
+    "max_temporal_ids": 8, "freeze_kv_on_static": false,
+    "kv_reset_frames": 0, "max_inflight_chunks": 2,
+    "profile_timings": true, "gate_enabled": false, "use_pe": false,
+    "input_codec": "mjpeg", "output_codec": "mjpeg", "output_quality": 95
+  }
+}

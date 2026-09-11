@@ -6,6 +6,12 @@
 // light kernels compile on toolchains without cutlass / CUDA<12.8).
 #include <torch/all.h>
 #include <torch/library.h>
+#ifdef _WIN32
+#include <pybind11/pybind11.h>
+// MSVC's Python-extension linker requires this export, even though the runtime
+// loads the library through torch.ops.load_library for TORCH_LIBRARY registration.
+PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {}
+#endif
 
 namespace joyomni_ops {
 

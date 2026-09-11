@@ -3,7 +3,7 @@
 #pragma once
 
 #include <cuda_runtime.h>
-#include <torch/all.h>
+#include <torch/types.h>
 
 #define JO_CHECK_CUDA(x) TORCH_CHECK((x).is_cuda(), #x " must be a CUDA tensor")
 #define JO_CHECK_CONTIGUOUS(x) TORCH_CHECK((x).is_contiguous(), #x " must be contiguous")

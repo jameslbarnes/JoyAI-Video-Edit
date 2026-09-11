@@ -1,0 +1,163 @@
+[
+  {
+    "name": "coral-position8",
+    "arm": "position8",
+    "input": "C:/Users/Admin/src/sana-streaming/tulip/evidence/shader-ab/input.mp4",
+    "prompt": "Transform the flowing neon shapes into an intricate bioluminescent alien coral reef, with translucent organic tendrils, rich texture and cinematic depth. Preserve the source movement and composition while completely replacing the flat synthetic surfaces with detailed living forms.",
+    "frames": 257
+  },
+  {
+    "name": "coral-blend0",
+    "arm": "blend0",
+    "input": "C:/Users/Admin/src/sana-streaming/tulip/evidence/shader-ab/input.mp4",
+    "prompt": "Transform the flowing neon shapes into an intricate bioluminescent alien coral reef, with translucent organic tendrils, rich texture and cinematic depth. Preserve the source movement and composition while completely replacing the flat synthetic surfaces with detailed living forms.",
+    "frames": 257
+  },
+  {
+    "name": "coral-blend0.1",
+    "arm": "blend0.1",
+    "input": "C:/Users/Admin/src/sana-streaming/tulip/evidence/shader-ab/input.mp4",
+    "prompt": "Transform the flowing neon shapes into an intricate bioluminescent alien coral reef, with translucent organic tendrils, rich texture and cinematic depth. Preserve the source movement and composition while completely replacing the flat synthetic surfaces with detailed living forms.",
+    "frames": 257
+  },
+  {
+    "name": "coral-blend0.3",
+    "arm": "blend0.3",
+    "input": "C:/Users/Admin/src/sana-streaming/tulip/evidence/shader-ab/input.mp4",
+    "prompt": "Transform the flowing neon shapes into an intricate bioluminescent alien coral reef, with translucent organic tendrils, rich texture and cinematic depth. Preserve the source movement and composition while completely replacing the flat synthetic surfaces with detailed living forms.",
+    "frames": 257
+  },
+  {
+    "name": "coral-blend0.5",
+    "arm": "blend0.5",
+    "input": "C:/Users/Admin/src/sana-streaming/tulip/evidence/shader-ab/input.mp4",
+    "prompt": "Transform the flowing neon shapes into an intricate bioluminescent alien coral reef, with translucent organic tendrils, rich texture and cinematic depth. Preserve the source movement and composition while completely replacing the flat synthetic surfaces with detailed living forms.",
+    "frames": 257
+  },
+  {
+    "name": "coral-blend1",
+    "arm": "blend1",
+    "input": "C:/Users/Admin/src/sana-streaming/tulip/evidence/shader-ab/input.mp4",
+    "prompt": "Transform the flowing neon shapes into an intricate bioluminescent alien coral reef, with translucent organic tendrils, rich texture and cinematic depth. Preserve the source movement and composition while completely replacing the flat synthetic surfaces with detailed living forms.",
+    "frames": 257
+  },
+  {
+    "name": "coral-blend2",
+    "arm": "blend2",
+    "input": "C:/Users/Admin/src/sana-streaming/tulip/evidence/shader-ab/input.mp4",
+    "prompt": "Transform the flowing neon shapes into an intricate bioluminescent alien coral reef, with translucent organic tendrils, rich texture and cinematic depth. Preserve the source movement and composition while completely replacing the flat synthetic surfaces with detailed living forms.",
+    "frames": 257
+  },
+  {
+    "name": "coral-blend3",
+    "arm": "blend3",
+    "input": "C:/Users/Admin/src/sana-streaming/tulip/evidence/shader-ab/input.mp4",
+    "prompt": "Transform the flowing neon shapes into an intricate bioluminescent alien coral reef, with translucent organic tendrils, rich texture and cinematic depth. Preserve the source movement and composition while completely replacing the flat synthetic surfaces with detailed living forms.",
+    "frames": 257
+  },
+  {
+    "name": "coral-blend5",
+    "arm": "blend5",
+    "input": "C:/Users/Admin/src/sana-streaming/tulip/evidence/shader-ab/input.mp4",
+    "prompt": "Transform the flowing neon shapes into an intricate bioluminescent alien coral reef, with translucent organic tendrils, rich texture and cinematic depth. Preserve the source movement and composition while completely replacing the flat synthetic surfaces with detailed living forms.",
+    "frames": 257
+  },
+  {
+    "name": "coral-ref90",
+    "arm": "ref90",
+    "input": "C:/Users/Admin/src/sana-streaming/tulip/evidence/shader-ab/input.mp4",
+    "prompt": "Transform the flowing neon shapes into an intricate bioluminescent alien coral reef, with translucent organic tendrils, rich texture and cinematic depth. Preserve the source movement and composition while completely replacing the flat synthetic surfaces with detailed living forms.",
+    "frames": 257
+  },
+  {
+    "name": "coral-ref75",
+    "arm": "ref75",
+    "input": "C:/Users/Admin/src/sana-streaming/tulip/evidence/shader-ab/input.mp4",
+    "prompt": "Transform the flowing neon shapes into an intricate bioluminescent alien coral reef, with translucent organic tendrils, rich texture and cinematic depth. Preserve the source movement and composition while completely replacing the flat synthetic surfaces with detailed living forms.",
+    "frames": 257
+  },
+  {
+    "name": "coral-fine_ramp",
+    "arm": "fine_ramp",
+    "input": "C:/Users/Admin/src/sana-streaming/tulip/evidence/shader-ab/input.mp4",
+    "prompt": "Transform the flowing neon shapes into an intricate bioluminescent alien coral reef, with translucent organic tendrils, rich texture and cinematic depth. Preserve the source movement and composition while completely replacing the flat synthetic surfaces with detailed living forms.",
+    "frames": 513
+  },
+  {
+    "name": "coral-ref_ramp",
+    "arm": "ref_ramp",
+    "input": "C:/Users/Admin/src/sana-streaming/tulip/evidence/shader-ab/input.mp4",
+    "prompt": "Transform the flowing neon shapes into an intricate bioluminescent alien coral reef, with translucent organic tendrils, rich texture and cinematic depth. Preserve the source movement and composition while completely replacing the flat synthetic surfaces with detailed living forms.",
+    "frames": 513
+  },
+  {
+    "name": "porcelain-position8",
+    "arm": "position8",
+    "input": "C:/Users/Admin/src/joyai-video-edit/tulip/evidence/strength-second-input-20260911/input.mp4",
+    "prompt": "Transform the moving shapes into a sculptural creature made of luminous cobalt blue porcelain, with intricate ivory floral glaze, a clear expressive face, and soft studio lighting. Preserve the source movement and overall composition while replacing flat shader surfaces with rich ceramic detail.",
+    "frames": 257
+  },
+  {
+    "name": "porcelain-blend0.1",
+    "arm": "blend0.1",
+    "input": "C:/Users/Admin/src/joyai-video-edit/tulip/evidence/strength-second-input-20260911/input.mp4",
+    "prompt": "Transform the moving shapes into a sculptural creature made of luminous cobalt blue porcelain, with intricate ivory floral glaze, a clear expressive face, and soft studio lighting. Preserve the source movement and overall composition while replacing flat shader surfaces with rich ceramic detail.",
+    "frames": 257
+  },
+  {
+    "name": "porcelain-blend0.3",
+    "arm": "blend0.3",
+    "input": "C:/Users/Admin/src/joyai-video-edit/tulip/evidence/strength-second-input-20260911/input.mp4",
+    "prompt": "Transform the moving shapes into a sculptural creature made of luminous cobalt blue porcelain, with intricate ivory floral glaze, a clear expressive face, and soft studio lighting. Preserve the source movement and overall composition while replacing flat shader surfaces with rich ceramic detail.",
+    "frames": 257
+  },
+  {
+    "name": "porcelain-blend0.5",
+    "arm": "blend0.5",
+    "input": "C:/Users/Admin/src/joyai-video-edit/tulip/evidence/strength-second-input-20260911/input.mp4",
+    "prompt": "Transform the moving shapes into a sculptural creature made of luminous cobalt blue porcelain, with intricate ivory floral glaze, a clear expressive face, and soft studio lighting. Preserve the source movement and overall composition while replacing flat shader surfaces with rich ceramic detail.",
+    "frames": 257
+  },
+  {
+    "name": "porcelain-blend1",
+    "arm": "blend1",
+    "input": "C:/Users/Admin/src/joyai-video-edit/tulip/evidence/strength-second-input-20260911/input.mp4",
+    "prompt": "Transform the moving shapes into a sculptural creature made of luminous cobalt blue porcelain, with intricate ivory floral glaze, a clear expressive face, and soft studio lighting. Preserve the source movement and overall composition while replacing flat shader surfaces with rich ceramic detail.",
+    "frames": 257
+  },
+  {
+    "name": "porcelain-blend2",
+    "arm": "blend2",
+    "input": "C:/Users/Admin/src/joyai-video-edit/tulip/evidence/strength-second-input-20260911/input.mp4",
+    "prompt": "Transform the moving shapes into a sculptural creature made of luminous cobalt blue porcelain, with intricate ivory floral glaze, a clear expressive face, and soft studio lighting. Preserve the source movement and overall composition while replacing flat shader surfaces with rich ceramic detail.",
+    "frames": 257
+  },
+  {
+    "name": "porcelain-blend3",
+    "arm": "blend3",
+    "input": "C:/Users/Admin/src/joyai-video-edit/tulip/evidence/strength-second-input-20260911/input.mp4",
+    "prompt": "Transform the moving shapes into a sculptural creature made of luminous cobalt blue porcelain, with intricate ivory floral glaze, a clear expressive face, and soft studio lighting. Preserve the source movement and overall composition while replacing flat shader surfaces with rich ceramic detail.",
+    "frames": 257
+  },
+  {
+    "name": "porcelain-ref75",
+    "arm": "ref75",
+    "input": "C:/Users/Admin/src/joyai-video-edit/tulip/evidence/strength-second-input-20260911/input.mp4",
+    "prompt": "Transform the moving shapes into a sculptural creature made of luminous cobalt blue porcelain, with intricate ivory floral glaze, a clear expressive face, and soft studio lighting. Preserve the source movement and overall composition while replacing flat shader surfaces with rich ceramic detail.",
+    "frames": 257
+  },
+  {
+    "name": "porcelain-fine_ramp",
+    "arm": "fine_ramp",
+    "input": "C:/Users/Admin/src/joyai-video-edit/tulip/evidence/strength-second-input-20260911/input.mp4",
+    "prompt": "Transform the moving shapes into a sculptural creature made of luminous cobalt blue porcelain, with intricate ivory floral glaze, a clear expressive face, and soft studio lighting. Preserve the source movement and overall composition while replacing flat shader surfaces with rich ceramic detail.",
+    "frames": 513
+  },
+  {
+    "name": "porcelain-ref_ramp",
+    "arm": "ref_ramp",
+    "input": "C:/Users/Admin/src/joyai-video-edit/tulip/evidence/strength-second-input-20260911/input.mp4",
+    "prompt": "Transform the moving shapes into a sculptural creature made of luminous cobalt blue porcelain, with intricate ivory floral glaze, a clear expressive face, and soft studio lighting. Preserve the source movement and overall composition while replacing flat shader surfaces with rich ceramic detail.",
+    "frames": 513
+  }
+]

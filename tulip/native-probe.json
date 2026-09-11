@@ -1,0 +1,11 @@
+{
+  "gpu": "NVIDIA GeForce RTX 5090",
+  "torch": "2.9.1+cu128",
+  "fused_rmsnorm": true,
+  "fused_norm_modulation": true,
+  "fused_qk_norm_rope_identity": true,
+  "triton_fp8_relative_rmse": 0.03647767752408981,
+  "fused_qk_norm_rope_weighted_rotations": true,
+  "cutlass_fp8_available": false,
+  "note": "Windows light CUDA extension + upstream GeForce Triton FP8 path; not a model inference benchmark"
+}

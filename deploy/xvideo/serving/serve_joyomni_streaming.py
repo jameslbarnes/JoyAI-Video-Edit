@@ -630,6 +630,8 @@ def create_app(args: argparse.Namespace) -> FastAPI:
     app.state.runtime_lock = threading.Lock()
     app.state.inference_lock = threading.Lock()
     app.state.active_session = None
+    from xvideo.serving.shader_strength import ShaderStrength
+    app.state.shader_strength = ShaderStrength()
     app.state.ws_debug = {}
 
     app.state.session_gate = SessionGate()
@@ -711,6 +713,21 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                 "session": session_debug,
             }
         )
+
+    @app.get("/strength")
+    def strength_status() -> JSONResponse:
+        return JSONResponse({'ok': True, 'strength': app.state.shader_strength.snapshot(),
+                             'active': app.state.active_session is not None})
+
+    @app.post("/strength")
+    def strength_set(payload: dict) -> JSONResponse:
+        if app.state.active_session is None:
+            return JSONResponse({'ok': False, 'error': 'no active JoyAI session'}, status_code=409)
+        try:
+            state = app.state.shader_strength.set(payload.get('value'))
+            return JSONResponse({'ok': True, 'strength': state, 'status': 'queued'})
+        except ValueError as exc:
+            return JSONResponse({'ok': False, 'error': str(exc)}, status_code=400)
 
     @app.post("/load")
     def load() -> JSONResponse:
@@ -1112,11 +1129,13 @@ def create_app(args: argparse.Namespace) -> FastAPI:
         def _create_session():
             if session_settings is None:
                 raise RuntimeError("streaming settings are not initialized")
-            return runtime.create_v2v_session(
+            created = runtime.create_v2v_session(
                 prompt=session_prompt,
                 settings=session_settings,
                 ref_image=ref_image,
             )
+            created.shader_strength = app.state.shader_strength
+            return created
 
         def _session_health_error(session_ref) -> str | None:
             if session_ref is None:
@@ -1514,7 +1533,7 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                         )
                         _start_recorders()
                         _start_output_task(session)
-                        if not pe_defer:
+                        if not pe_defer and args.prebake_graph:
                             def _prebake(_p=session_prompt, _s=session_settings, _r=ref_image):
                                 with app.state.inference_lock:
                                     runtime.prebake_graph(_p, settings=_s, ref_image=_r)
@@ -1597,6 +1616,29 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                             "ts": time.time() * 1000.0,
                             "up_ms": None if _up_ms is None else round(_up_ms, 1),
                         })
+                        continue
+                    elif msg_type == "set_strength":
+                        try:
+                            if session is None:
+                                raise ValueError('no active session')
+                            state = app.state.shader_strength.set(payload.get('value'))
+                            await _send_json({'type': 'strength_queued', 'strength': state})
+                        except ValueError as exc:
+                            await _send_json({'type': 'strength_error', 'message': str(exc)})
+                        continue
+                    elif msg_type == "update_prompt":
+                        try:
+                            if session is None:
+                                raise ValueError("no active session")
+                            revision = session.queue_prompt(str(payload.get("prompt") or ""))
+                            raw_session_prompt = session_prompt = str(payload["prompt"])
+                            last_activity = time.monotonic()
+                            await _send_json({"type": "prompt_queued", "revision": revision,
+                                              "request_id": payload.get("request_id"),
+                                              "cache_preserved": True})
+                        except ValueError as exc:
+                            await _send_json({"type": "prompt_error", "message": str(exc),
+                                              "request_id": payload.get("request_id")})
                         continue
                     elif msg_type == "set_output_quality":
                         try:
@@ -2060,6 +2102,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--freeze-kv-on-static", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--static-diff-thresh", type=float, default=0.5)
     parser.add_argument("--preload", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--prebake-graph", action=argparse.BooleanOptionalAction, default=True,
+                        help="Prebake on a black anchor; disable to capture on the real first input frame.")
     parser.add_argument("--push-frame-timeout-s", type=float, default=15.0, help="Max seconds a single frame submission may block before releasing the WS session gate.")
     parser.add_argument("--max-inflight-chunks", type=int, default=2, help="Drop incoming frames while this many chunks are already in the pipeline (latency governor; pins display latency to ~N chunk periods). 2 keeps glass-to-glass latency low (~1 chunk) and prevents the session-start init stall from building a frame backlog (the 'ramp-up'); higher values buffer more (smoother under hiccups) at the cost of latency and a startup ramp. 0 disables. Overridable per session via the start payload's max_inflight_chunks.")
     parser.add_argument("--session-close-timeout-s", type=float, default=5.0, help="Best-effort session cleanup timeout during WS teardown.")
@@ -2084,7 +2128,7 @@ def main() -> None:
     from xvideo.lowvram import apply_vram_cap_for_testing
     apply_vram_cap_for_testing(args.device)
     app = create_app(args)
-    uvicorn.run(app, host=args.host, port=args.port, log_level="info", ws_max_size=32 * 1024 * 1024, ws_per_message_deflate=False, loop="uvloop")
+    uvicorn.run(app, host=args.host, port=args.port, log_level="info", ws_max_size=32 * 1024 * 1024, ws_per_message_deflate=False, loop="asyncio" if os.name == "nt" else "uvloop")
 
 
 if __name__ == "__main__":

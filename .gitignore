@@ -2,6 +2,11 @@
 deploy/deps/
 
 # Python
+.venv/
+.toolchain/
+tulip/models/
+tulip/cache/
+tulip/evidence/
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -12,6 +17,8 @@ deploy/recordings/
 # joyomni_ops build artifacts (compiled locally via pip install)
 deploy/joyomni_ops/build/
 deploy/joyomni_ops/**/*.so
+deploy/joyomni_ops/**/*.pyd
+tulip/*.log
 
 # Third-party build checkouts (SageAttention, cutlass -> deploy/tmp/, see DEPLOYMENT.md §2)
 deploy/tmp/

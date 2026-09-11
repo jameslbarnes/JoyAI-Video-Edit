@@ -1,0 +1,182 @@
+[
+  {
+    "repo": "jdopensource/JoyAI-Video-Edit",
+    "revision": "39491dda89fd2b535777fd8644a6631ea89b857c",
+    "file": "config.json",
+    "path": "C:\\Users\\Admin\\src\\joyai-video-edit\\tulip\\models\\JoyAI-Video-Edit\\config.json",
+    "bytes": 282,
+    "sha256": "6acf97b7fd3ff6152f08b952db4a6a6285cf487d02de1136402e5f4415275320",
+    "lfs_verified": false
+  },
+  {
+    "repo": "jdopensource/JoyAI-Video-Edit",
+    "revision": "39491dda89fd2b535777fd8644a6631ea89b857c",
+    "file": "meta.yaml",
+    "path": "C:\\Users\\Admin\\src\\joyai-video-edit\\tulip\\models\\JoyAI-Video-Edit\\meta.yaml",
+    "bytes": 226,
+    "sha256": "ba2dca1996a527dd53a346c23e61eef70c1b189c36bda040df6d0b42d2b49ce9",
+    "lfs_verified": false
+  },
+  {
+    "repo": "jdopensource/JoyAI-Video-Edit",
+    "revision": "39491dda89fd2b535777fd8644a6631ea89b857c",
+    "file": "dit/joyai_video_edit_dit_0811.pth",
+    "path": "C:\\Users\\Admin\\src\\joyai-video-edit\\tulip\\models\\JoyAI-Video-Edit\\dit\\joyai_video_edit_dit_0811.pth",
+    "bytes": 32527662903,
+    "sha256": "b3904b6fda53d13b230918bb616f322d12cfb2337b0e8d9dc203cdabc36605ba",
+    "lfs_verified": true
+  },
+  {
+    "repo": "jdopensource/JoyAI-Video-Edit",
+    "revision": "39491dda89fd2b535777fd8644a6631ea89b857c",
+    "file": "vae/config.json",
+    "path": "C:\\Users\\Admin\\src\\joyai-video-edit\\tulip\\models\\JoyAI-Video-Edit\\vae\\config.json",
+    "bytes": 1786,
+    "sha256": "3e2c82ecdc135f98ef663daf695b3fc8de97f2e6f1acbaf7005149e458258714",
+    "lfs_verified": false
+  },
+  {
+    "repo": "jdopensource/JoyAI-Video-Edit",
+    "revision": "39491dda89fd2b535777fd8644a6631ea89b857c",
+    "file": "vae/diffusion_pytorch_model.safetensors",
+    "path": "C:\\Users\\Admin\\src\\joyai-video-edit\\tulip\\models\\JoyAI-Video-Edit\\vae\\diffusion_pytorch_model.safetensors",
+    "bytes": 1534679470,
+    "sha256": "150315748d7c3307cdae2819ee651b32d58385668ca0c4db3d3dcd6e63b77e86",
+    "lfs_verified": true
+  },
+  {
+    "repo": "XiaomiMiMo/MiMo-VL-7B-RL-2508",
+    "revision": "4bfb270765825d2fa059011deb4c96fdd579be6f",
+    "file": "added_tokens.json",
+    "path": "C:\\Users\\Admin\\src\\joyai-video-edit\\tulip\\models\\MiMo-VL-7B-RL-2508\\added_tokens.json",
+    "bytes": 605,
+    "sha256": "58b54bbe36fc752f79a24a271ef66a0a0830054b4dfad94bde757d851968060b",
+    "lfs_verified": false
+  },
+  {
+    "repo": "XiaomiMiMo/MiMo-VL-7B-RL-2508",
+    "revision": "4bfb270765825d2fa059011deb4c96fdd579be6f",
+    "file": "chat_template.json",
+    "path": "C:\\Users\\Admin\\src\\joyai-video-edit\\tulip\\models\\MiMo-VL-7B-RL-2508\\chat_template.json",
+    "bytes": 1072,
+    "sha256": "4757062314f864cf47b9ce6ea4bd921590611c5b90f0860c523831756edc4fa1",
+    "lfs_verified": false
+  },
+  {
+    "repo": "XiaomiMiMo/MiMo-VL-7B-RL-2508",
+    "revision": "4bfb270765825d2fa059011deb4c96fdd579be6f",
+    "file": "config.json",
+    "path": "C:\\Users\\Admin\\src\\joyai-video-edit\\tulip\\models\\MiMo-VL-7B-RL-2508\\config.json",
+    "bytes": 1398,
+    "sha256": "577c695f5f2fcd9c0d94f01f77f61bc85f5405884f8d38915efd5e80b07a426d",
+    "lfs_verified": false
+  },
+  {
+    "repo": "XiaomiMiMo/MiMo-VL-7B-RL-2508",
+    "revision": "4bfb270765825d2fa059011deb4c96fdd579be6f",
+    "file": "generation_config.json",
+    "path": "C:\\Users\\Admin\\src\\joyai-video-edit\\tulip\\models\\MiMo-VL-7B-RL-2508\\generation_config.json",
+    "bytes": 131,
+    "sha256": "91299bcc334095eb7d4352d16bce2500e3ef0b88c731e608f31a98ac8b307096",
+    "lfs_verified": false
+  },
+  {
+    "repo": "XiaomiMiMo/MiMo-VL-7B-RL-2508",
+    "revision": "4bfb270765825d2fa059011deb4c96fdd579be6f",
+    "file": "merges.txt",
+    "path": "C:\\Users\\Admin\\src\\joyai-video-edit\\tulip\\models\\MiMo-VL-7B-RL-2508\\merges.txt",
+    "bytes": 1671839,
+    "sha256": "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3",
+    "lfs_verified": false
+  },
+  {
+    "repo": "XiaomiMiMo/MiMo-VL-7B-RL-2508",
+    "revision": "4bfb270765825d2fa059011deb4c96fdd579be6f",
+    "file": "model.safetensors.index.json",
+    "path": "C:\\Users\\Admin\\src\\joyai-video-edit\\tulip\\models\\MiMo-VL-7B-RL-2508\\model.safetensors.index.json",
+    "bytes": 65507,
+    "sha256": "e04c60ee22acd1266730b230daf6560f76d49927e5c58823a4f8100eaa089d14",
+    "lfs_verified": false
+  },
+  {
+    "repo": "XiaomiMiMo/MiMo-VL-7B-RL-2508",
+    "revision": "4bfb270765825d2fa059011deb4c96fdd579be6f",
+    "file": "preprocessor_config.json",
+    "path": "C:\\Users\\Admin\\src\\joyai-video-edit\\tulip\\models\\MiMo-VL-7B-RL-2508\\preprocessor_config.json",
+    "bytes": 350,
+    "sha256": "f2058c716eef96ccaed1cc1e2d0c08306b62586d535b28d9d08e691b2fab7ca0",
+    "lfs_verified": false
+  },
+  {
+    "repo": "XiaomiMiMo/MiMo-VL-7B-RL-2508",
+    "revision": "4bfb270765825d2fa059011deb4c96fdd579be6f",
+    "file": "special_tokens_map.json",
+    "path": "C:\\Users\\Admin\\src\\joyai-video-edit\\tulip\\models\\MiMo-VL-7B-RL-2508\\special_tokens_map.json",
+    "bytes": 613,
+    "sha256": "76862e765266b85aa9459767e33cbaf13970f327a0e88d1c65846c2ddd3a1ecd",
+    "lfs_verified": false
+  },
+  {
+    "repo": "XiaomiMiMo/MiMo-VL-7B-RL-2508",
+    "revision": "4bfb270765825d2fa059011deb4c96fdd579be6f",
+    "file": "tokenizer.json",
+    "path": "C:\\Users\\Admin\\src\\joyai-video-edit\\tulip\\models\\MiMo-VL-7B-RL-2508\\tokenizer.json",
+    "bytes": 7031645,
+    "sha256": "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539",
+    "lfs_verified": false
+  },
+  {
+    "repo": "XiaomiMiMo/MiMo-VL-7B-RL-2508",
+    "revision": "4bfb270765825d2fa059011deb4c96fdd579be6f",
+    "file": "tokenizer_config.json",
+    "path": "C:\\Users\\Admin\\src\\joyai-video-edit\\tulip\\models\\MiMo-VL-7B-RL-2508\\tokenizer_config.json",
+    "bytes": 7270,
+    "sha256": "cfeae2f7f1c2c2ca25c51d6fe03c0003a2965eb84ed97b405120d84cc73889f4",
+    "lfs_verified": false
+  },
+  {
+    "repo": "XiaomiMiMo/MiMo-VL-7B-RL-2508",
+    "revision": "4bfb270765825d2fa059011deb4c96fdd579be6f",
+    "file": "vocab.json",
+    "path": "C:\\Users\\Admin\\src\\joyai-video-edit\\tulip\\models\\MiMo-VL-7B-RL-2508\\vocab.json",
+    "bytes": 2776833,
+    "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
+    "lfs_verified": false
+  },
+  {
+    "repo": "XiaomiMiMo/MiMo-VL-7B-RL-2508",
+    "revision": "4bfb270765825d2fa059011deb4c96fdd579be6f",
+    "file": "model-00001-of-00004.safetensors",
+    "path": "C:\\Users\\Admin\\src\\joyai-video-edit\\tulip\\models\\MiMo-VL-7B-RL-2508\\model-00001-of-00004.safetensors",
+    "bytes": 4612695408,
+    "sha256": "f93e07524d843d63c080eef4fd43d7c5b98ac7a17e8c56e48edfe89297d6bff3",
+    "lfs_verified": true
+  },
+  {
+    "repo": "XiaomiMiMo/MiMo-VL-7B-RL-2508",
+    "revision": "4bfb270765825d2fa059011deb4c96fdd579be6f",
+    "file": "model-00002-of-00004.safetensors",
+    "path": "C:\\Users\\Admin\\src\\joyai-video-edit\\tulip\\models\\MiMo-VL-7B-RL-2508\\model-00002-of-00004.safetensors",
+    "bytes": 4937303136,
+    "sha256": "9715248b5ff4357d2deb23669c83131f35934c981e88f648a9769976e533412e",
+    "lfs_verified": true
+  },
+  {
+    "repo": "XiaomiMiMo/MiMo-VL-7B-RL-2508",
+    "revision": "4bfb270765825d2fa059011deb4c96fdd579be6f",
+    "file": "model-00003-of-00004.safetensors",
+    "path": "C:\\Users\\Admin\\src\\joyai-video-edit\\tulip\\models\\MiMo-VL-7B-RL-2508\\model-00003-of-00004.safetensors",
+    "bytes": 4982109888,
+    "sha256": "5b8db223f443f8ed88b65017c65aaa9e201e386b942676e75bf1651202e2181f",
+    "lfs_verified": true
+  },
+  {
+    "repo": "XiaomiMiMo/MiMo-VL-7B-RL-2508",
+    "revision": "4bfb270765825d2fa059011deb4c96fdd579be6f",
+    "file": "model-00004-of-00004.safetensors",
+    "path": "C:\\Users\\Admin\\src\\joyai-video-edit\\tulip\\models\\MiMo-VL-7B-RL-2508\\model-00004-of-00004.safetensors",
+    "bytes": 2080418376,
+    "sha256": "8bcbeaac2b402096c0629435395003fa66eb14dfba682d3af02b4398001f5b0f",
+    "lfs_verified": true
+  }
+]

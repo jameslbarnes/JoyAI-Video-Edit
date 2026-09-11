@@ -1,0 +1,9 @@
+{
+  "gpu": "NVIDIA GeForce RTX 5090",
+  "torch": "2.9.1+cu128",
+  "sage_version": "2.2.0+JoyAI current-stream patch+Windows compiler flags",
+  "relative_rmse_eager": 0.036351099610328674,
+  "relative_rmse_graph": 0.036351099610328674,
+  "relative_rmse_graph_changed_inputs": 0.03712351620197296,
+  "status": "passed"
+}

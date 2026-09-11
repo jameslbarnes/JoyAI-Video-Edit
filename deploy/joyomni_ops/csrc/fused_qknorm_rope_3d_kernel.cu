@@ -15,7 +15,7 @@
 #include <c10/cuda/CUDAStream.h>
 #include <cuda_bf16.h>
 #include <cuda_runtime.h>
-#include <torch/all.h>
+#include <torch/types.h>
 
 #include "joyomni_ops.h"
 

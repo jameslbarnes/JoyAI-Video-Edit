@@ -76,9 +76,10 @@ def load_pipeline(cfg, dit, device: torch.device):
     vae = build_vae(cfg, device)
 
     te_offload = te_cpu_offload_enabled()
+    text_device = torch.device(os.environ.get("JOYOMNI_TEXT_DEVICE", str(device)))
     tokenizer, text_encoder = load_text_encoder(
         torch_dtype=PRECISION_TO_TYPE[cfg.text_encoder_precision],
-        device=device,
+        device=text_device,
         cpu_offload=te_offload,
         **_arch_params(cfg.text_encoder_arch_config),
     )
@@ -94,7 +95,8 @@ def load_pipeline(cfg, dit, device: torch.device):
         args=cfg,
         **_arch_params(cfg.pipeline_arch_config),
     )
-    if te_offload:
+    pipeline.text_execution_device = text_device
+    if te_offload or text_device != torch.device(device):
         # DiffusionPipeline.to() refuses to move pipelines that contain a
         # sequentially-offloaded model; place the remaining modules manually
         # (the DiT is already on `device` from load_dit).
