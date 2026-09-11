@@ -43,6 +43,14 @@ The existing launcher remains `tulip/run-service.ps1 -Gpu 1 -TextGpu 0`.
 Model loading has a high transient host-RAM requirement; when both models are
 resident it may page heavily. Stage JoyAI loading before the Flux companion.
 
+Recovery verification: SDK `logs/joyai-freeze-recovered-20260911/audit.json`
+measured 16.18 generated canvas FPS over 20 seconds, capture-to-canvas p50/p95
+1060/1082ms. `model-1.jpg` is a fresh independently received NDI output (other
+one-shot grabs timed out). Coral prompt and direct blend .03 were restored;
+all five video workers were alive after 1,841 output frames. This recovery
+check did not stress-test additional hot prompt shapes; the new guard has CPU
+regression coverage, not a new long-run concurrency qualification.
+
 The patched server accepts `update_prompt {prompt, request_id}` on the existing
 WebSocket. It prepares image/text conditioning on a background encoder thread,
 then applies it in the DiT worker between chunks. Latest pending request wins;
