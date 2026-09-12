@@ -35,7 +35,7 @@ class RifeOutput:
         self.previous_meta = None
 
     @torch.inference_mode()
-    def process(self, frames, metas, profile, quality=95):
+    def process(self, frames, metas, profile, quality=95, *, raw_output=False):
         start = time.perf_counter()
         output, correspondence = [], []
         with torch.cuda.device(self.device):
@@ -43,7 +43,8 @@ class RifeOutput:
                 return [], []
             if len(frames) > 8 or len(frames) != len(metas):
                 raise ValueError("RIFE accepts at most one matched eight-frame chunk")
-            arrays = np.stack([np.asarray(Image.open(io.BytesIO(j)).convert("RGB")) for j in frames])
+            arrays = np.stack([np.asarray(Image.open(io.BytesIO(j)).convert("RGB"))
+                               if isinstance(j, bytes) else j for j in frames])
             batch = torch.from_numpy(arrays).permute(0, 3, 1, 2).to(self.device, torch.float16) / 255
             h, w = batch.shape[-2:]
             batch = F.pad(batch, (0, (-w) % 32, 0, (-h) % 32), mode="replicate")
@@ -55,12 +56,16 @@ class RifeOutput:
                 pixels = middle[:, :, :h, :w].clamp(0, 1).mul(255).byte().permute(0, 2, 3, 1).cpu().numpy()
             for i, (jpeg, meta) in enumerate(zip(frames, metas)):
                 if has_previous or i > 0:
-                    buffer = io.BytesIO()
-                    Image.fromarray(pixels[i if has_previous else i-1]).save(buffer, format="JPEG", quality=quality)
-                    output.append(buffer.getvalue())
+                    midpoint = pixels[i if has_previous else i-1]
+                    if raw_output:
+                        output.append(midpoint)
+                    else:
+                        buffer = io.BytesIO()
+                        Image.fromarray(midpoint).save(buffer, format="JPEG", quality=quality)
+                        output.append(buffer.getvalue())
                     correspondence.append({**meta, "interpolated": True,
                         "source_seq_previous": (metas[i-1] if i else self.previous_meta).get("seq"), "interpolation_t": 0.5})
-                output.append(jpeg)
+                output.append(arrays[i] if raw_output else jpeg)
                 correspondence.append({**meta, "interpolated": False})
             self.previous, self.previous_meta = batch[-1:].clone(), metas[-1]
         # Midpoint .cpu() above synchronizes our work, not every JoyAI stream.

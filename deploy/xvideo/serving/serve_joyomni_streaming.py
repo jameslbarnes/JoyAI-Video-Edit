@@ -617,19 +617,28 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                     warmup_height=args.height,
                     warmup_width=args.width,
                 )
+                app.state.runtime.raw_presentation_output = app.state.upscaler is not None
         return app.state.runtime
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
         if args.preload:
             get_runtime()
+        if app.state.upscaler is not None:
+            await asyncio.to_thread(app.state.upscaler.warmup)
         yield
+        if app.state.upscaler is not None:
+            await asyncio.to_thread(app.state.upscaler.close)
 
     app = FastAPI(lifespan=lifespan)
     app.state.runtime = None
     app.state.runtime_lock = threading.Lock()
     app.state.inference_lock = threading.Lock()
     app.state.active_session = None
+    app.state.upscaler = None
+    if os.environ.get("JOYAI_UPSCALE_DEVICE"):
+        from xvideo.serving.upscale_output import OutputUpscale
+        app.state.upscaler = OutputUpscale(os.environ["JOYAI_UPSCALE_DEVICE"])
     from xvideo.serving.shader_strength import ShaderStrength
     app.state.shader_strength = ShaderStrength()
     app.state.ws_debug = {}
@@ -668,6 +677,7 @@ def create_app(args: argparse.Namespace) -> FastAPI:
             {
                 "ok": True,
                 "runtime_loaded": app.state.runtime is not None,
+                "upscale": app.state.upscaler.status() if app.state.upscaler else {"supported": False, "enabled": False},
                 "dit_ckpt": args.dit_ckpt,
                 "device": str(app.state.runtime.device) if app.state.runtime is not None else args.device,
                 "vae_device": str(_module_device(app.state.runtime.pipeline.vae)) if app.state.runtime is not None else args.vae_device,
@@ -905,11 +915,15 @@ def create_app(args: argparse.Namespace) -> FastAPI:
 
             if gate_state.get("absent_hold"):
                 return 0
-            if rife_multiplier == 2 and encoded_frames and isinstance(encoded_frames[0], bytes):
+            if rife_multiplier == 2 and encoded_frames and (isinstance(encoded_frames[0], bytes) or app.state.upscaler is not None):
                 if not source_metas:
                     source_metas = [{} for _ in encoded_frames]
                 encoded_frames, source_metas = await asyncio.to_thread(
-                    rife.process, encoded_frames, source_metas, profile, output_quality)
+                    rife.process, encoded_frames, source_metas, profile, output_quality,
+                    raw_output=app.state.upscaler is not None)
+            if app.state.upscaler is not None:
+                encoded_frames = await asyncio.to_thread(
+                    app.state.upscaler.process, encoded_frames, profile, output_quality)
             count = len(encoded_frames)
             if not source_metas:
                 source_metas = [{} for _ in range(count)]
@@ -1048,6 +1062,8 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                             "t_capture_ms": source_meta.get("t_capture_ms"),
                             "server_elapsed": server_elapsed,
                             "profile": profile,
+                            "output_width": profile.get("upscale", {}).get("width", session_settings.width if session_settings else args.width),
+                            "output_height": profile.get("upscale", {}).get("height", session_settings.height if session_settings else args.height),
 
                             "key": is_key,
                         }
@@ -1421,6 +1437,8 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                         _up_allow = args.uplink_codec == "auto" and not lossless_mode
                         _dn_allow = args.downlink_codec == "auto" and not lossless_mode
                         output_codec = "h264" if payload.get("output_codec", "h264") == "h264" and _dn_allow else "mjpeg"
+                        if app.state.upscaler is not None:
+                            output_codec = "mjpeg"
                         h264_stream = _H264Stream(output_quality) if output_codec == "h264" else None
                         input_codec = "h264" if payload.get("input_codec", "h264") == "h264" and _up_allow else "mjpeg"
                         h264_ingest = _H264Ingest() if input_codec == "h264" else None
@@ -1566,6 +1584,9 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                                 "rife_supported": bool(os.environ.get("JOYAI_RIFE_FLUX_ROOT")),
                                 "rife_multiplier": rife_multiplier,
                                 "output_fps": float(args.fps) * rife_multiplier,
+                                "upscale": app.state.upscaler.status() if app.state.upscaler else {"supported": False, "enabled": False},
+                                "output_width": session_settings.width * (2 if app.state.upscaler and app.state.upscaler.enabled else 1),
+                                "output_height": session_settings.height * (2 if app.state.upscaler and app.state.upscaler.enabled else 1),
                                 "frames_per_next_chunk": session.frames_per_next_chunk,
                                 "height": session_settings.height,
                                 "width": session_settings.width,
@@ -1685,6 +1706,15 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                             scene_serial += 1
                             prepared_scene = None
                             scene_task = asyncio.create_task(_prepare_scene(session, prompt, scene_serial))
+                        continue
+                    elif msg_type == "set_upscale":
+                        try:
+                            if app.state.upscaler is None:
+                                raise ValueError("Output SR is not configured in this service")
+                            status = await asyncio.to_thread(app.state.upscaler.set_enabled, payload.get("enabled"))
+                            await _send_json({"type": "upscale_changed", "upscale": status})
+                        except ValueError as exc:
+                            await _send_json({"type": "upscale_error", "message": str(exc)})
                         continue
                     elif msg_type == "set_rife":
                         requested = int(payload.get("multiplier", 1))

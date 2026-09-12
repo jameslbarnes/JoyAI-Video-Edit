@@ -1927,7 +1927,8 @@ class JoyOmniV2VStreamingSession:
             .permute(1, 2, 3, 0)
             .contiguous()
         )
-        if self.runtime.lossless_output or self.settings.output_codec == "h264":
+        if (self.runtime.lossless_output or self.settings.output_codec == "h264"
+                or getattr(self.runtime, "raw_presentation_output", False)):
             return list(frames_u8.cpu().numpy())
 
         quality = max(1, min(100, int(self.runtime.output_quality)))
