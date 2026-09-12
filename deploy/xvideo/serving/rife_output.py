@@ -30,12 +30,25 @@ class RifeOutput:
         self.model.to(self.device, torch.float16)
         self.reset()
 
-    def reset(self):
+    def reset(self, *, transition=False):
+        # Presentation-only endpoint. Never reused as VAE/KV/model input.
+        self.transition_pending = bool(transition)
         self.previous = None
         self.previous_meta = None
 
+    def _morph(self, first, last):
+        """Flux-style recursive midpoints: 15 images bridging two endpoints."""
+        chain = torch.cat([first, last])
+        for _ in range(4):
+            middle = self.model(torch.cat([chain[:-1], chain[1:]], dim=1))
+            expanded = torch.empty((len(chain) * 2 - 1, *chain.shape[1:]),
+                                   device=chain.device, dtype=chain.dtype)
+            expanded[::2], expanded[1::2] = chain, middle
+            chain = expanded
+        return chain[1:-1]
+
     @torch.inference_mode()
-    def process(self, frames, metas, profile, quality=95, *, raw_output=False):
+    def process(self, frames, metas, profile, quality=95, *, raw_output=False, transition_source=None):
         start = time.perf_counter()
         output, correspondence = [], []
         with torch.cuda.device(self.device):
@@ -48,6 +61,31 @@ class RifeOutput:
             batch = torch.from_numpy(arrays).permute(0, 3, 1, 2).to(self.device, torch.float16) / 255
             h, w = batch.shape[-2:]
             batch = F.pad(batch, (0, (-w) % 32, 0, (-h) % 32), mode="replicate")
+            bridge_pending = self.transition_pending
+            self.transition_pending = False
+            if bridge_pending and transition_source is not None:
+                # New sessions produce a single initialization frame. Keeping
+                # this contract makes the first presentation chunk <=16 frames.
+                if len(batch) != 1:
+                    raise ValueError("Scene morph requires the single-frame initialization chunk")
+                morph_start = time.perf_counter()
+                source_image = Image.fromarray(np.asarray(transition_source).astype(np.uint8)).convert("RGB")
+                source_array = np.array(source_image.resize((w, h), Image.Resampling.BICUBIC), copy=True)
+                bridge = torch.from_numpy(source_array).permute(2, 0, 1).unsqueeze(0).to(self.device, torch.float16) / 255
+                bridge = F.pad(bridge, (0, (-w) % 32, 0, (-h) % 32), mode="replicate")
+                morph = self._morph(bridge, batch[:1])[:, :, :h, :w]
+                morph = morph.clamp(0, 1).mul(255).byte().permute(0, 2, 3, 1).cpu().numpy()
+                for i, pixels in enumerate(morph):
+                    if raw_output:
+                        output.append(pixels)
+                    else:
+                        buffer = io.BytesIO()
+                        Image.fromarray(pixels).save(buffer, format="JPEG", quality=quality)
+                        output.append(buffer.getvalue())
+                    correspondence.append({**metas[0], "interpolated": True,
+                        "presentation": "scene-morph", "interpolation_t": (i + 1) / 16})
+                profile["scene_morph_s"] = time.perf_counter() - morph_start
+                profile["scene_morph_frames"] = len(morph)
             has_previous = self.previous is not None and self.previous.shape[1:] == batch.shape[1:]
             chain = torch.cat([self.previous, batch]) if has_previous else batch
             pixels = None

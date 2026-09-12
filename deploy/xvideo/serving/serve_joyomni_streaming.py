@@ -920,7 +920,8 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                     source_metas = [{} for _ in encoded_frames]
                 encoded_frames, source_metas = await asyncio.to_thread(
                     rife.process, encoded_frames, source_metas, profile, output_quality,
-                    raw_output=app.state.upscaler is not None)
+                    raw_output=app.state.upscaler is not None,
+                    transition_source=getattr(session, "_latest_source_frame", None) if rife.transition_pending else None)
             if app.state.upscaler is not None:
                 encoded_frames = await asyncio.to_thread(
                     app.state.upscaler.process, encoded_frames, profile, output_quality)
@@ -1057,6 +1058,7 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                             "count": count,
                             "source_seq": source_meta.get("seq"),
                             "interpolated": bool(source_meta.get("interpolated", False)),
+                            "presentation": source_meta.get("presentation", "generated"),
                             "source_seq_previous": source_meta.get("source_seq_previous"),
                             "interpolation_t": source_meta.get("interpolation_t"),
                             "t_capture_ms": source_meta.get("t_capture_ms"),
@@ -1562,7 +1564,7 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                             from xvideo.serving.rife_output import RifeOutput
                             rife = await asyncio.to_thread(RifeOutput, args.device)
                         if rife is not None:
-                            rife.reset()
+                            rife.reset(transition=token is not None and rife_multiplier == 2)
                         print("#####[RESTART] new session created; sending 'started'", flush=True)
                         app.state.active_session = session
                         frames_since_session_reset = 0
@@ -1581,6 +1583,7 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                             {
                                 "type": "started",
                                 "scene_prepare_supported": True,
+                                "scene_morph_supported": rife_multiplier == 2,
                                 "rife_supported": bool(os.environ.get("JOYAI_RIFE_FLUX_ROOT")),
                                 "rife_multiplier": rife_multiplier,
                                 "output_fps": float(args.fps) * rife_multiplier,

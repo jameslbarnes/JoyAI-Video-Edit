@@ -34,6 +34,22 @@ for _ in range(4):
 model.reset()
 out,_=model.process(frames[:1],metas[:1],{})
 assert len(out)==1, "Reset must prevent cross-scene interpolation"
+model.reset(transition=True)
+profile = {}
+source = Image.open(io.BytesIO(frames[-1])).convert("RGB")
+out, mapped = model.process(frames[:1], metas[:1], profile, transition_source=source)
+assert len(out) == 16 and out[-1] == frames[0]
+assert sum(m.get("presentation") == "scene-morph" for m in mapped) == 15
+assert [m["interpolation_t"] for m in mapped[:-1]] == [i / 16 for i in range(1, 16)]
+assert profile["generated_count"] == 1 and profile["scene_morph_frames"] == 15
+assert len(set(out)) > 8, "Morph must not be repeated endpoints"
+profiles.append(profile)
+out, mapped = model.process(frames[1:2], metas[1:2], {})
+assert len(out) == 2 and not any(m.get("presentation") == "scene-morph" for m in mapped)
+model.reset(transition=True)
+model.reset()
+out, _ = model.process(frames[:1], metas[:1], {}, transition_source=source)
+assert len(out) == 1, "Ordinary reset must cancel pending morph"
 print(json.dumps({"device":torch.cuda.get_device_name(),"cpu_threads":torch.get_num_threads(),"profiles":profiles,
     "peak_allocated_MiB":torch.cuda.max_memory_allocated()/2**20,
     "peak_reserved_MiB":torch.cuda.max_memory_reserved()/2**20}))
