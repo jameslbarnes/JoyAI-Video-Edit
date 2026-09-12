@@ -673,10 +673,12 @@ def create_app(args: argparse.Namespace) -> FastAPI:
 
     @app.get("/health")
     def health() -> JSONResponse:
+        from .encoder_status import encoder_status
         return JSONResponse(
             {
                 "ok": True,
                 "runtime_loaded": app.state.runtime is not None,
+                "textEncoder": encoder_status(app.state.runtime.pipeline if app.state.runtime is not None else None),
                 "upscale": app.state.upscaler.status() if app.state.upscaler else {"supported": False, "enabled": False},
                 "dit_ckpt": args.dit_ckpt,
                 "device": str(app.state.runtime.device) if app.state.runtime is not None else args.device,
