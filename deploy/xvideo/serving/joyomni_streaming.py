@@ -692,7 +692,10 @@ class JoyOmniV2VStreamingSession:
 
     @torch.no_grad()
     def _encode_streaming_prompt(self, anchor_frame: Image.Image) -> None:
-        self.streaming_cond_embeds = self._encode_prompt_value(self.prompt, anchor_frame).to(self.device)
+        prepared = getattr(self, "_initial_prompt_embeds", None)
+        self.streaming_cond_embeds = (prepared if prepared is not None else
+                                     self._encode_prompt_value(self.prompt, anchor_frame)).to(self.device)
+        self._initial_prompt_embeds = None
 
     @torch.no_grad()
     def _encode_prompt_value(self, text: str, anchor_frame: Image.Image) -> torch.Tensor:

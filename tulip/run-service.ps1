@@ -1,6 +1,7 @@
-param([int]$Gpu=0, [int]$Port=7873, [int]$TextGpu=-1, [int]$SinkRefreshChunks=0)
+param([int]$Gpu=0, [int]$Port=7873, [int]$TextGpu=-1, [int]$SinkRefreshChunks=0, [string]$RifeFluxRoot='')
 $ErrorActionPreference='Stop'
 $repo=Split-Path $PSScriptRoot -Parent
+if($RifeFluxRoot){$env:JOYAI_RIFE_FLUX_ROOT=(Resolve-Path -LiteralPath $RifeFluxRoot).Path}
 $env:CUDA_VISIBLE_DEVICES="$Gpu"
 if($TextGpu -ge 0 -and $TextGpu -ne $Gpu){
   $textFree=[double](& nvidia-smi -i $TextGpu --query-gpu=memory.free --format=csv,noheader,nounits)

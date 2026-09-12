@@ -73,7 +73,9 @@ class LocalPreset:
                 except (ValueError, TypeError):
                     return message
                 if isinstance(payload, dict) and payload.get("type") == "start":
-                    payload = {**preset["start"], "prompt": str(payload.get("prompt") or preset["prompt"])[:12000]}
+                    payload = {**preset["start"], "prompt": str(payload.get("prompt") or preset["prompt"])[:12000],
+                               "scene_token": payload.get("scene_token"),
+                               "rife_multiplier": 2 if payload.get("rife_multiplier") == 2 else 1}
                     message = {**message, "text": json.dumps(payload)}
             return message
 

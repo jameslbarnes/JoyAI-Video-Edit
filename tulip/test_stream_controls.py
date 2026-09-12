@@ -13,8 +13,9 @@ import torch
 source = Path(__file__).resolve().parents[1] / "deploy/xvideo/serving/joyomni_streaming.py"
 tree = ast.parse(source.read_text(encoding="utf-8"))
 cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "JoyOmniV2VStreamingSession")
-names = {"queue_prompt", "_prepare_prompt_worker", "_apply_prepared_prompt", "_refresh_sink_and_measure"}
-namespace = {"threading": threading, "time": time, "torch": torch}
+names = {"queue_prompt", "_prepare_prompt_worker", "_apply_prepared_prompt", "_refresh_sink_and_measure", "_encode_streaming_prompt"}
+from PIL import Image
+namespace = {"threading": threading, "time": time, "torch": torch, "Image": Image}
 methods = [n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name in names]
 exec(compile(ast.Module(body=methods, type_ignores=[]), str(source), "exec"), namespace)
 Control = type("Control", (), {n: namespace[n] for n in names})
@@ -46,6 +47,15 @@ def control():
 
 
 class StreamControls(unittest.TestCase):
+    def test_prepared_scene_initialization_skips_encoder_and_consumes_embeddings(self):
+        c = control()
+        embeds = torch.ones(1, 9, 2)
+        c._initial_prompt_embeds = embeds
+        c._encode_prompt_value = lambda *args: self.fail("New scene re-encoded prepared prompt")
+        c._encode_streaming_prompt(None)
+        self.assertIs(c.streaming_cond_embeds, embeds)
+        self.assertIsNone(c._initial_prompt_embeds)
+
     def test_hot_prompt_never_captures_with_active_vae_workers(self):
         c = control()
         c._prompt_request = 1

@@ -827,6 +827,23 @@ def create_app(args: argparse.Namespace) -> FastAPI:
         send_lock = asyncio.Lock()
         stop_output_pump = asyncio.Event()
         output_task: asyncio.Task[None] | None = None
+        scene_task = None
+        prepared_scene = None
+        scene_serial = 0
+        rife = None
+        rife_multiplier = 1
+
+        async def _prepare_scene(session_ref, prompt, token):
+            nonlocal prepared_scene
+            started = time.perf_counter()
+            try:
+                anchor = session_ref._latest_source_frame.copy()
+                embeds = await asyncio.to_thread(session_ref._encode_prompt_value, prompt, anchor)
+                prepared_scene = (token, prompt, embeds)
+                await _send_json({"type": "scene_prepared", "token": token,
+                                  "prepare_s": time.perf_counter() - started})
+            except Exception as exc:
+                await _send_json({"type": "scene_error", "message": str(exc)})
 
         flow = {"recv": None, "at": 0.0, "dropped": 0, "congested": False,
                 "base": 0, "has_ack": False, "probe": 0, "clamped": False,
@@ -888,6 +905,11 @@ def create_app(args: argparse.Namespace) -> FastAPI:
 
             if gate_state.get("absent_hold"):
                 return 0
+            if rife_multiplier == 2 and encoded_frames and isinstance(encoded_frames[0], bytes):
+                if not source_metas:
+                    source_metas = [{} for _ in encoded_frames]
+                encoded_frames, source_metas = await asyncio.to_thread(
+                    rife.process, encoded_frames, source_metas, profile, output_quality)
             count = len(encoded_frames)
             if not source_metas:
                 source_metas = [{} for _ in range(count)]
@@ -895,7 +917,7 @@ def create_app(args: argparse.Namespace) -> FastAPI:
             _wire_chunk = h264_stream is not None or (
                 encoded_frames and isinstance(encoded_frames[0], (bytes, bytearray))
             )
-            _fps = max(1.0, float(args.fps))
+            _fps = max(1.0, float(args.fps)) * rife_multiplier
             _outstanding = None
             if _wire_chunk and flow["recv"] is not None and (time.time() - flow["at"]) < 5.0:
                 _outstanding = max(0, (frames_out - int(flow.get("base") or 0)) - int(flow["recv"]))
@@ -1020,6 +1042,9 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                             "index": idx,
                             "count": count,
                             "source_seq": source_meta.get("seq"),
+                            "interpolated": bool(source_meta.get("interpolated", False)),
+                            "source_seq_previous": source_meta.get("source_seq_previous"),
+                            "interpolation_t": source_meta.get("interpolation_t"),
                             "t_capture_ms": source_meta.get("t_capture_ms"),
                             "server_elapsed": server_elapsed,
                             "profile": profile,
@@ -1358,6 +1383,18 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                     payload = json.loads(message["text"])
                     msg_type = payload.get("type")
                     if msg_type == "start":
+                        initial_embeds = None
+                        token = payload.get("scene_token")
+                        if token is not None:
+                            if (prepared_scene is None or prepared_scene[0] != token or
+                                    prepared_scene[1] != str(payload.get("prompt", ""))):
+                                await _send_json({"type": "scene_error", "message": "Prepared scene expired or mismatched"})
+                                continue
+                            initial_embeds = prepared_scene[2]
+                        if scene_task is not None:
+                            await scene_task
+                            scene_task = None
+                        prepared_scene = None
                         print(f"#####[RESTART] 'start' received (session {'live' if session is not None else 'none'})", flush=True)
                         last_activity = time.monotonic()
                         await _cancel_pe()
@@ -1500,6 +1537,14 @@ def create_app(args: argparse.Namespace) -> FastAPI:
 
                         print("#####[RESTART] creating new session", flush=True)
                         session = _create_session()
+                        session._initial_prompt_embeds = initial_embeds
+                        requested_rife = int(payload.get("rife_multiplier", 1))
+                        rife_multiplier = 2 if requested_rife == 2 and os.environ.get("JOYAI_RIFE_FLUX_ROOT") else 1
+                        if rife_multiplier == 2 and rife is None:
+                            from xvideo.serving.rife_output import RifeOutput
+                            rife = await asyncio.to_thread(RifeOutput, args.device)
+                        if rife is not None:
+                            rife.reset()
                         print("#####[RESTART] new session created; sending 'started'", flush=True)
                         app.state.active_session = session
                         frames_since_session_reset = 0
@@ -1517,6 +1562,10 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                         await _send_json(
                             {
                                 "type": "started",
+                                "scene_prepare_supported": True,
+                                "rife_supported": bool(os.environ.get("JOYAI_RIFE_FLUX_ROOT")),
+                                "rife_multiplier": rife_multiplier,
+                                "output_fps": float(args.fps) * rife_multiplier,
                                 "frames_per_next_chunk": session.frames_per_next_chunk,
                                 "height": session_settings.height,
                                 "width": session_settings.width,
@@ -1625,6 +1674,34 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                             await _send_json({'type': 'strength_queued', 'strength': state})
                         except ValueError as exc:
                             await _send_json({'type': 'strength_error', 'message': str(exc)})
+                        continue
+                    elif msg_type == "prepare_scene":
+                        prompt = str(payload.get("prompt") or "").strip()
+                        if session is None or not session.initialized or not prompt or len(prompt) > 12000:
+                            await _send_json({"type": "scene_error", "message": "Scene preparation needs an initialized session and valid prompt"})
+                        elif scene_task is not None and not scene_task.done():
+                            await _send_json({"type": "scene_error", "message": "Scene preparation already in progress"})
+                        else:
+                            scene_serial += 1
+                            prepared_scene = None
+                            scene_task = asyncio.create_task(_prepare_scene(session, prompt, scene_serial))
+                        continue
+                    elif msg_type == "set_rife":
+                        requested = int(payload.get("multiplier", 1))
+                        if requested not in (1, 2) or requested == 2 and not os.environ.get("JOYAI_RIFE_FLUX_ROOT"):
+                            await _send_json({"type": "interpolation_error", "message": "RIFE is unavailable or multiplier is unsupported"})
+                            continue
+                        await _stop_output_task()
+                        if requested == 2 and rife is None:
+                            from xvideo.serving.rife_output import RifeOutput
+                            rife = await asyncio.to_thread(RifeOutput, args.device)
+                        if rife is not None:
+                            rife.reset()
+                        rife_multiplier = requested
+                        await _send_json({"type": "interpolation_changed", "multiplier": rife_multiplier,
+                                          "output_fps": float(args.fps) * rife_multiplier})
+                        if session is not None:
+                            _start_output_task(session)
                         continue
                     elif msg_type == "update_prompt":
                         try:
@@ -2031,6 +2108,11 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                 raise
         finally:
             try:
+                if scene_task is not None:
+                    try:
+                        await scene_task
+                    except Exception:
+                        pass  # Disconnect while notifying preparation must not skip teardown.
                 await _cancel_pe()
                 await _stop_output_task()
                 await asyncio.to_thread(_stop_recorders)
