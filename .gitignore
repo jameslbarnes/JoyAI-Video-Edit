@@ -25,3 +25,6 @@ deploy/tmp/
 
 # Hugging Face Space checkout (never commit to the public repo)
 deploy/hf_space/
+
+# Read-only pinned SR research source; see tulip/UPSCALING_TRIAL.md.
+tulip/research/Real-ESRGAN/
