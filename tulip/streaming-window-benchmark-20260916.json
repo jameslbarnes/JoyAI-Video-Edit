@@ -1,0 +1,42 @@
+[
+  {
+    "chunks": 100,
+    "direct": {
+      "median_ms": 0.000400003045797348,
+      "peak_bytes": 424
+    },
+    "historical": {
+      "median_ms": 0.031000003218650818,
+      "peak_bytes": 26720
+    }
+  },
+  {
+    "chunks": 50000,
+    "direct": {
+      "median_ms": 0.000500003807246685,
+      "peak_bytes": 552
+    },
+    "historical": {
+      "median_ms": 32.068400003481656,
+      "peak_bytes": 19611744
+    }
+  },
+  {
+    "chunks": 100000,
+    "direct": {
+      "median_ms": 0.000500003807246685,
+      "peak_bytes": 552
+    },
+    "historical": {
+      "median_ms": 76.37039999826811,
+      "peak_bytes": 39168352
+    }
+  },
+  {
+    "chunks": 1000000000,
+    "direct": {
+      "median_ms": 0.000500003807246685,
+      "peak_bytes": 552
+    }
+  }
+]

@@ -13,9 +13,9 @@ import torch
 source = Path(__file__).resolve().parents[1] / "deploy/xvideo/serving/joyomni_streaming.py"
 tree = ast.parse(source.read_text(encoding="utf-8"))
 cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "JoyOmniV2VStreamingSession")
-names = {"queue_prompt", "_prepare_prompt_worker", "_apply_prepared_prompt", "_refresh_sink_and_measure", "_encode_streaming_prompt"}
+names = {"queue_prompt", "_prepare_prompt_worker", "_apply_prepared_prompt", "_refresh_sink_and_measure", "_encode_streaming_prompt", "_prepare_prompt_graph"}
 from PIL import Image
-namespace = {"threading": threading, "time": time, "torch": torch, "Image": Image}
+namespace = {"threading": threading, "time": time, "torch": torch, "Image": Image, "graph_env_enabled": lambda: True, "fixed_prompt_graph_enabled": lambda: False}
 methods = [n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name in names]
 exec(compile(ast.Module(body=methods, type_ignores=[]), str(source), "exec"), namespace)
 Control = type("Control", (), {n: namespace[n] for n in names})
@@ -40,10 +40,78 @@ def control():
     c._graph_key = lambda: "graph"
     c.runtime = SimpleNamespace(graph_runners={})
     c._maybe_prepare_graph_runner = lambda: None
+    c._prepare_prompt_graph = lambda embeds, revision: None
     c._sink_refresh_chunks = 32
     c._sink_chunk = c._sink_refresh_count = 0
     c.settings = SimpleNamespace(max_temporal_ids=128)
     return c
+
+
+class PromptGraphRefresh(unittest.TestCase):
+    def make_control(self):
+        c = control()
+        c._submit_lock = threading.RLock()
+        c._debug_lock = threading.Lock()
+        c._debug_counters = dict(submitted_chunks=3, postprocessed_chunks=3, pseudo_encoded_chunks=3)
+        c._raise_worker_error_if_needed = lambda: None
+        c.runtime.dit_lock = threading.RLock()
+        c.runtime.presentation_lock = threading.RLock()
+        c.runtime.interpolation_lock = threading.RLock()
+        c.streaming_cond_embeds = torch.zeros(1, 2, 2)
+        c._graph_key = lambda embeds=None: (embeds if embeds is not None else c.streaming_cond_embeds).shape[1]
+        c._prompt_request = 1
+        c._prepare_prompt_graph = Control._prepare_prompt_graph.__get__(c)
+        return c
+
+    def test_new_shape_waits_for_all_stages_and_preserves_current_prompt(self):
+        c = self.make_control()
+        old = c.streaming_cond_embeds
+        c._debug_counters['pseudo_encoded_chunks'] = 2
+        captured = threading.Event()
+        def capture():
+            self.assertEqual(c.streaming_cond_embeds.shape[1], 9)
+            self.assertEqual(c._debug_counters['pseudo_encoded_chunks'], 3)
+            c.runtime.graph_runners[9] = object()
+            captured.set()
+        c._maybe_prepare_graph_runner = capture
+        with patch.object(torch.cuda, 'device_count', return_value=0):
+            t = threading.Thread(target=c._prepare_prompt_graph, args=(torch.ones(1, 9, 2), 1))
+            t.start()
+            self.assertFalse(captured.wait(.05))
+            # Input cannot enter until the old pseudo stage finishes and capture completes.
+            self.assertFalse(c._submit_lock.acquire(blocking=False))
+            c._debug_counters['pseudo_encoded_chunks'] = 3
+            t.join(2)
+        self.assertFalse(t.is_alive())
+        self.assertTrue(captured.is_set())
+        self.assertIs(c.streaming_cond_embeds, old)
+        self.assertEqual(c.prompt, 'old')
+        self.assertEqual(c._prompt_revision, 0)
+
+
+    def test_existing_shape_needs_no_drain_or_capture(self):
+        c = self.make_control()
+        c.runtime.graph_runners[9] = object()
+        c._maybe_prepare_graph_runner = lambda: self.fail('recaptured cached shape')
+        c._submit_lock = None
+        c._prepare_prompt_graph(torch.ones(1, 9, 2), 1)
+
+    def test_stale_request_does_not_capture(self):
+        c = self.make_control()
+        c._prompt_request = 2
+        c._maybe_prepare_graph_runner = lambda: self.fail('captured stale request')
+        c._prepare_prompt_graph(torch.ones(1, 9, 2), 1)
+
+    def test_capture_failure_restores_embeddings_and_unlocks_input(self):
+        c = self.make_control()
+        old = c.streaming_cond_embeds
+        def fail(): raise RuntimeError('capture failed')
+        c._maybe_prepare_graph_runner = fail
+        with patch.object(torch.cuda, 'device_count', return_value=0), self.assertRaises(RuntimeError):
+            c._prepare_prompt_graph(torch.ones(1, 9, 2), 1)
+        self.assertIs(c.streaming_cond_embeds, old)
+        self.assertTrue(c._submit_lock.acquire(blocking=False))
+        c._submit_lock.release()
 
 
 class StreamControls(unittest.TestCase):

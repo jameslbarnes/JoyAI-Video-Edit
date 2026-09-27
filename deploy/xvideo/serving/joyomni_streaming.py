@@ -19,7 +19,7 @@ from xvideo.models.models import load_dit, load_pipeline, build_vae
 from xvideo.models.pipeline import (
     PRECISION_TO_TYPE,
 )
-from xvideo.serving.graph_runner import GRAPH_WINDOW_CHUNKS, StreamingGraphRunner, graph_env_enabled
+from xvideo.serving.graph_runner import GRAPH_WINDOW_CHUNKS, StreamingGraphRunner, graph_env_enabled, fixed_prompt_graph_enabled, prompt_graph_capacity, prompt_graph_capacities
 from xvideo.utils import _dynamic_resize_from_bucket, seed_everything
 
 DEFAULT_REFERENCE_IMG_IV2V_BASESIZE = 768
@@ -106,6 +106,7 @@ class _ChunkJob:
     total_started: float
     frozen_anchor_id: int | None = None
     valid_count: int | None = None
+    source_pixels: torch.Tensor | None = None  # original GPU upload, THWC uint8
 
 @dataclass
 class _EncodedChunk:
@@ -203,10 +204,27 @@ class JoyOmniRuntime:
         self.postprocess_device = postprocess_device or _module_device(self.pseudo_encode_vae)
         self.dit_lock = threading.RLock()
         self.text_lock = threading.Lock()
+        self.presentation_lock = threading.RLock()
+        self.interpolation_lock = threading.RLock()
+        from xvideo.serving.stage_timings import StageTimings
+        self.stage_timings = StageTimings()
+        # The runtime outlives sessions. Keep VAE allocator ownership on the
+        # same streams when a session is replaced at unchanged resolution.
+        self.vae_worker_streams = {}
+        self.vae_submission_locks = {}
         self.output_quality = 60
         self.lossless_output = False
         self.graph_runners: dict[tuple, StreamingGraphRunner] = {}
         self.graph_capture_failures: dict[tuple, int] = {}
+
+    def run_presentation(self, function, *args, **kwargs):
+        # Graph capture must exclude RIFE/SR work on every device in this process.
+        with self.presentation_lock:
+            return function(*args, **kwargs)
+
+    def run_interpolation(self, function, *args, **kwargs):
+        with self.interpolation_lock:
+            return function(*args, **kwargs)
 
     @classmethod
     def load(
@@ -287,7 +305,8 @@ class JoyOmniRuntime:
         pipeline.transformer.eval()
 
         _orientations = [(warmup_height, warmup_width)]
-        if (warmup_width, warmup_height) != (warmup_height, warmup_width):
+        native_warmup_only = os.environ.get("JOYOMNI_WARMUP_NATIVE_ONLY", "0") == "1"
+        if not native_warmup_only and (warmup_width, warmup_height) != (warmup_height, warmup_width):
             _orientations.append((warmup_width, warmup_height))
         _stem_mod = pipeline.vae.stem
 
@@ -305,6 +324,10 @@ class JoyOmniRuntime:
                         decode_vae, _lat_c,
                         _ch // _fspa, _cw // _fspa,
                         device=_ddev, dtype=_ddt,
+                        # Graph scheduler accumulates/returns FP32 latents even
+                        # with BF16 DiT/VAE compute. Warm the actual input guard.
+                        input_dtype=(torch.float32 if graph_env_enabled() else
+                                     PRECISION_TO_TYPE[cfg.dit_precision]),
                     )
         except Exception as _vc_exc:
             print(f"#####[STREAM] VAE compile warmup skipped: {_vc_exc!r}")
@@ -336,7 +359,7 @@ class JoyOmniRuntime:
             _ref_hw = sorted({(c[3], c[4]) for c in _ref_cfgs})
             _vc.maybe_setup_encode_dynamic(_src_vae)
             _vc.warmup_encode_dynamic(
-                _src_vae, 3, _ref_hw,
+                _src_vae, 3, [] if native_warmup_only else _ref_hw,
                 device=_module_device(_src_vae), dtype=_vae_dt,
                 temporal_lens=(1,),
                 autocast=False,
@@ -510,6 +533,7 @@ class JoyOmniV2VStreamingSession:
             else settings.enable_denormalization
         )
 
+        self._submit_lock = threading.RLock()
         self.initialized = False
         self.chunk_idx = 0
         self.pending_frames: list[Image.Image] = []
@@ -614,26 +638,30 @@ class JoyOmniV2VStreamingSession:
         self,
         frame: Image.Image,
         frame_meta: dict[str, Any] | None = None,
+        *,
+        drain_results: bool = True,
     ) -> list[StreamingChunkResult]:
-        self._raise_worker_error_if_needed()
-        frame = self._resize_frame(frame)
-        self._latest_source_frame = frame
-        meta = frame_meta or {"seq": self.chunk_idx + len(self.pending_frames) + 1, "t_capture_ms": time.time() * 1000.0}
-        if not self.initialized:
-            self._initialize(frame)
-        self.pending_frames.append(frame)
-        self.pending_metas.append(meta)
-        results: list[StreamingChunkResult] = []
-        while len(self.pending_frames) >= self.frames_per_next_chunk:
-            n = self.frames_per_next_chunk
-            chunk_frames = self.pending_frames[:n]
-            chunk_metas = self.pending_metas[:n]
-            del self.pending_frames[:n]
-            del self.pending_metas[:n]
-            results.extend(self._submit_or_process_chunk(chunk_frames, chunk_metas))
-        results.extend(self._drain_async_results())
-        self._raise_worker_error_if_needed()
-        return results
+        with self._submit_lock:
+            self._raise_worker_error_if_needed()
+            frame = self._resize_frame(frame)
+            self._latest_source_frame = frame
+            meta = frame_meta or {"seq": self.chunk_idx + len(self.pending_frames) + 1, "t_capture_ms": time.time() * 1000.0}
+            if not self.initialized:
+                self._initialize(frame)
+            self.pending_frames.append(frame)
+            self.pending_metas.append(meta)
+            results: list[StreamingChunkResult] = []
+            while len(self.pending_frames) >= self.frames_per_next_chunk:
+                n = self.frames_per_next_chunk
+                chunk_frames = self.pending_frames[:n]
+                chunk_metas = self.pending_metas[:n]
+                del self.pending_frames[:n]
+                del self.pending_metas[:n]
+                results.extend(self._submit_or_process_chunk(chunk_frames, chunk_metas))
+            if drain_results:
+                results.extend(self._drain_async_results())
+            self._raise_worker_error_if_needed()
+            return results
 
     @torch.no_grad()
     def flush_pending(self) -> None:
@@ -657,6 +685,17 @@ class JoyOmniV2VStreamingSession:
             prompt_thread.join()
         # Drain workers before invalidating tensors they may still be using.
         self._stop_async_workers()
+        # Worker joins finish CPU submissions, not outstanding CUDA kernels.
+        # A prepared next scene can immediately reuse the runtime's VAE/graph
+        # storage, so finish all session devices before clearing shared caches.
+        if torch.cuda.is_available():
+            devices = {str(self.device), str(self.postprocess_device)}
+            devices.update(str(_module_device(vae)) for vae in (
+                self.pipeline.vae, self.decode_vae, self.pseudo_encode_vae,
+            ) if vae is not None)
+            for device in sorted(devices):
+                if torch.device(device).type == "cuda":
+                    torch.cuda.synchronize(device)
         self._clear_vae_feature_caches()
         self.pipeline.transformer.reset_inference_kv_cache()
         # No empty_cache: keep the freed KV/graph blocks cached in the allocator
@@ -686,7 +725,7 @@ class JoyOmniV2VStreamingSession:
             )
             self.ref_image_kv_prefilled = True
 
-        self._maybe_prepare_graph_runner()
+        self._prepare_graph_family()
 
         self.initialized = True
 
@@ -746,6 +785,7 @@ class JoyOmniV2VStreamingSession:
             started = time.perf_counter()
             try:
                 embeds = self._encode_prompt_value(prompt, anchor)
+                self._prepare_prompt_graph(embeds, revision)
                 with self._prompt_lock:
                     if revision == self._prompt_request and not self._closing:
                         self._prepared_prompt = (revision, prompt, embeds)
@@ -758,6 +798,50 @@ class JoyOmniV2VStreamingSession:
                         self._prompt_error = str(exc)
                 print(f"#####[PROMPT] encoding failed; old prompt retained: {exc!r}", flush=True)
 
+    @torch.no_grad()
+    def _prepare_prompt_graph(self, embeds, revision):
+        """Capture a changed text shape after draining work, preserving all KV state."""
+        if not graph_env_enabled():
+            return
+        key = self._graph_key(embeds)
+        if self.runtime.graph_runners.get(key) is not None:
+            return
+        if fixed_prompt_graph_enabled():
+            # Live updates must never drain the pipeline for a graph capture.
+            # A complete family is required before initialized becomes true.
+            raise RuntimeError('Prompt graph was not prewarmed; active prompt retained')
+        started = time.perf_counter()
+        with self._submit_lock:
+            deadline = time.monotonic() + 10.0
+            while True:
+                with self._prompt_lock:
+                    if self._closing or revision != self._prompt_request:
+                        return
+                self._raise_worker_error_if_needed()
+                with self._debug_lock:
+                    counters = dict(self._debug_counters)
+                submitted = counters.get("submitted_chunks", 0)
+                if all(counters.get(stage, 0) >= submitted for stage in
+                       ("postprocessed_chunks", "pseudo_encoded_chunks")):
+                    break
+                if time.monotonic() >= deadline:
+                    raise RuntimeError("Timed out draining GPU stages for prompt graph capture")
+                time.sleep(0.005)
+            # No new model jobs enter; all existing GPU stages have submitted
+            # their final work. Output processing has its own worker-thread lock.
+            with self.runtime.dit_lock, self.runtime.presentation_lock, self.runtime.interpolation_lock:
+                previous = self.streaming_cond_embeds
+                try:
+                    for index in range(torch.cuda.device_count()):
+                        torch.cuda.synchronize(index)
+                    self.streaming_cond_embeds = embeds.to(device=self.device, dtype=self.target_dtype)
+                    self._maybe_prepare_graph_runner()
+                finally:
+                    self.streaming_cond_embeds = previous
+        self._prompt_graph_prepare_s = time.perf_counter() - started
+        print(f"#####[PROMPT] graph prepared revision={revision} "
+              f"seconds={self._prompt_graph_prepare_s:.3f} cache_preserved=True", flush=True)
+
     def _apply_prepared_prompt(self, chunk_idx, profile):
         with self._prompt_lock:
             prepared = self._prepared_prompt
@@ -768,11 +852,9 @@ class JoyOmniV2VStreamingSession:
         started = time.perf_counter()
         self.streaming_cond_embeds = embeds.to(device=self.device, dtype=self.target_dtype)
         self.prompt = self.raw_prompt = prompt
-        # Do not capture a new CUDA graph while the VAE workers are active.
-        # Their synchronous host/device copies can invalidate stream capture,
-        # even with thread_local capture error mode. Reuse a warm shape or run
-        # this prompt eagerly; session initialization can capture after reset.
-        # Keep real embeddings and temporal history (no padding/truncation).
+        # The encoder worker prepares a missing shape while GPU stages are
+        # drained. Only bind here, at the next chunk boundary; never capture
+        # concurrently with VAE work or alter the prompt's token sequence.
         runner = self.runtime.graph_runners.get(self._graph_key())
         profile["prompt_graph_reused"] = bool(runner is not None)
         profile["prompt_graph_capture_deferred"] = bool(runner is None)
@@ -967,17 +1049,37 @@ class JoyOmniV2VStreamingSession:
         store = scope_store[self.pipeline._kv_cache_memory_id("ref_image")]
         return int(store[0]["key"].shape[1])
 
-    def _graph_key(self) -> tuple:
+    def _graph_key(self, prompt_embeds=None) -> tuple:
+        embeds = self.streaming_cond_embeds if prompt_embeds is None else prompt_embeds
+        capacity = prompt_graph_capacity(int(embeds.shape[1]), int(self.settings.max_sequence_length or self.cfg.text_token_max_length)) if fixed_prompt_graph_enabled() else int(embeds.shape[1])
+        if not 0 < int(embeds.shape[1]) <= capacity:
+            raise ValueError("Prompt embeddings exceed the graph prompt capacity")
         return (
             self.latent_h,
             self.latent_w,
-            int(self.streaming_cond_embeds.shape[1]),
+            capacity,
             self._ref_kv_tokens(),
             int(self.settings.max_temporal_ids or 0),
             int(self.settings.num_inference_steps),
+            fixed_prompt_graph_enabled(),
         )
 
-    def _maybe_prepare_graph_runner(self) -> None:
+    def _prepare_graph_family(self) -> None:
+        if not fixed_prompt_graph_enabled():
+            self._maybe_prepare_graph_runner()
+            return
+        if not graph_env_enabled():
+            return
+        limit = int(self.settings.max_sequence_length or self.cfg.text_token_max_length)
+        base_key = self._graph_key()
+        for capacity in prompt_graph_capacities(limit):
+            self._maybe_prepare_graph_runner(prompt_capacity=capacity)
+            key = (*base_key[:2], capacity, *base_key[3:])
+            runner = self.runtime.graph_runners.get(key)
+            if runner is None or not runner.ready:
+                raise RuntimeError(f'Could not prewarm prompt capacity {capacity}; playback not started')
+
+    def _maybe_prepare_graph_runner(self, prompt_capacity=None) -> None:
         mti = self.settings.max_temporal_ids
         if not graph_env_enabled() or mti is None or self.chunk_size != 1:
             return
@@ -986,6 +1088,8 @@ class JoyOmniV2VStreamingSession:
         if not self.global_sink_chunk or self.local_window_size != GRAPH_WINDOW_CHUNKS:
             return
         key = self._graph_key()
+        if prompt_capacity is not None:
+            key = (*key[:2], prompt_capacity, *key[3:])
         cache = self.runtime.graph_runners
         fails = self.runtime.graph_capture_failures
         with self.runtime.dit_lock:
@@ -995,9 +1099,17 @@ class JoyOmniV2VStreamingSession:
             if fails.get(key, 0) >= _GRAPH_CAPTURE_MAX_FAILS:
                 return
             torch.cuda.synchronize(self.device)
-            live_keys = [k for k, v in cache.items() if v is not None]
-            while len(live_keys) >= _GRAPH_CACHE_CAP:
-                del cache[live_keys.pop(0)]
+            if fixed_prompt_graph_enabled():
+                family = (*key[:2], *key[3:])
+                for old_key in list(cache):
+                    if (*old_key[:2], *old_key[3:]) != family:
+                        del cache[old_key]
+                shared_kv = next(iter(cache.values()), None)
+            else:
+                shared_kv = None
+                live_keys = [k for k, v in cache.items() if v is not None]
+                while len(live_keys) >= _GRAPH_CACHE_CAP:
+                    del cache[live_keys.pop(0)]
             cache.pop(key, None)
             # No empty_cache: the evicted runner's freed blocks are reused for the
             # new static bufs; returning them to the driver only slows recapture.
@@ -1008,7 +1120,9 @@ class JoyOmniV2VStreamingSession:
                 chunk_tokens=self.latent_h * self.latent_w,
                 ref_tokens=self._ref_kv_tokens(),
                 latent_shape=latent_shape,
-                txt_len=int(self.streaming_cond_embeds.shape[1]),
+                txt_len=key[2],
+                mask_prompt=fixed_prompt_graph_enabled(),
+                shared_kv=shared_kv,
                 max_temporal_ids=int(mti),
                 pos_freqs=self._graph_cached_freqs(pos_table_ids),
                 device=self.device,
@@ -1062,10 +1176,19 @@ class JoyOmniV2VStreamingSession:
         active_chunk_id: int,
     ) -> torch.Tensor:
         profile["graph_path"] = 1
+        profile["graph_prompt_capacity"] = runner.txt_len
+        profile["graph_prompt_tokens"] = runner.prompt_tokens
+        profile["graph_prompt_masked"] = runner.mask_prompt
+        profile["graph_trim_padded_text"] = hasattr(runner.prompt_key_mask, '_fp8_text_rows')
+        profile["graph_active_text_rows"] = getattr(runner, 'active_text_rows', runner.txt_len)
+        profile["graph_prompt_capacities"] = sorted(k[2] for k in self.runtime.graph_runners)
+        profile["graph_prompt_attention"] = ("sage-prefix" if hasattr(runner.prompt_key_mask, '_sage_prefix') else "cudnn" if runner.mask_prompt else "unmasked")
         runner.in_ref_latent.copy_(ref_chunk_latent.to(self.target_dtype))
         started = self._timer_start(self.device)
-        runner.in_noise.copy_(current_chunk_latents.to(self.target_dtype))
-        runner.full_graph.replay()
+        with self.runtime.stage_timings.measure('dit_graph', self.device, profile.get('chunk_idx'),
+                                               prompt_capacity=profile.get('graph_prompt_capacity')):
+            runner.in_noise.copy_(current_chunk_latents.to(self.target_dtype))
+            runner.full_graph.replay()
         self._timer_record(profile, "dit_forward_cond_s", started)
 
         keep_before_store = {self.pipeline._kv_cache_memory_id("clean", cid) for cid in history_chunk_ids}
@@ -1100,19 +1223,17 @@ class JoyOmniV2VStreamingSession:
 
         strength = self.shader_strength.advance()
         profile['shader_strength'] = strength
-        if strength['blend']:
-            current_chunk_latents = torch.lerp(current_chunk_latents, ref_chunk_latent, strength['blend'])
-        if strength['referenceGain'] != 1:
-            ref_chunk_latent = ref_chunk_latent * strength['referenceGain']
+        from .shader_strength import prepare_strength_inputs
+        current_chunk_latents, ref_chunk_latent = prepare_strength_inputs(
+            current_chunk_latents, ref_chunk_latent, strength)
 
         total_latent_frames = chunk_idx + 1
-        chunk_windows = self.pipeline._get_chunk_windows(
+        chunk_window = self.pipeline._get_last_chunk_window(
             total_latent_frames=total_latent_frames,
             chunk_size=self.chunk_size,
             window_size=self.local_window_size,
             global_sink_chunk=self.global_sink_chunk,
         )
-        chunk_window = chunk_windows[-1]
         selected_chunk_ids = chunk_window["selected_chunk_ids"]
         history_chunk_ids = selected_chunk_ids[:-1]
         active_chunk_id = selected_chunk_ids[-1]
@@ -1349,12 +1470,29 @@ class JoyOmniV2VStreamingSession:
                 return None
             return torch.cuda.Stream(device=dev, **kw)
 
-        self._encode_stream = _stream_for(self.pipeline.vae)
+        # One VAE stream per device permits temporary allocator blocks to be
+        # reused across encode/decode. Locks prevent their Python submissions
+        # from interleaving; dependency waits stay outside these locks.
+        self._shared_vae_stream = os.environ.get("JOYAI_SHARED_VAE_STREAM", "0") == "1"
+        self._vae_submission_locks = self.runtime.vae_submission_locks if self._shared_vae_stream else {}
+        _vae_streams = self.runtime.vae_worker_streams if self._shared_vae_stream else {}
+
+        def _vae_stream_for(module):
+            key = str(_canonical_device(_module_device(module)))
+            if key not in _vae_streams:
+                _vae_streams[key] = _stream_for(module)
+                self._vae_submission_locks[key] = threading.RLock()
+            return _vae_streams[key]
+
+        self._encode_stream = _vae_stream_for(self.pipeline.vae) if self._shared_vae_stream else _stream_for(self.pipeline.vae)
         _dec_dev = _module_device(self.decode_vae)
         _bg = _stream_for(_dec_dev)
         self._decode_stream = _bg
         _ps_dev = _module_device(self.pseudo_encode_vae)
         self._pseudo_stream = _bg if _canonical_device(_ps_dev) == _canonical_device(_dec_dev) else _stream_for(_ps_dev)
+        if self._shared_vae_stream:
+            self._decode_stream = _vae_stream_for(self.decode_vae)
+            self._pseudo_stream = _vae_stream_for(self.pseudo_encode_vae)
         self._post_stream = _stream_for(self.postprocess_device)
         self._dit_stream = _stream_for(self.device, priority=-1)
         self._workers = [
@@ -1366,6 +1504,12 @@ class JoyOmniV2VStreamingSession:
         ]
         for worker in self._workers:
             worker.start()
+
+    def _vae_submission(self, module):
+        # Synchronous startup/warm-up has no worker streams and needs no lock.
+        if not getattr(self, "_shared_vae_stream", False):
+            return nullcontext()
+        return self._vae_submission_locks[str(_canonical_device(_module_device(module)))]
 
     def _stop_async_workers(self) -> None:
         if self._encode_queue is None:
@@ -1474,6 +1618,7 @@ class JoyOmniV2VStreamingSession:
             "counters": counters,
             "pseudo_latent_chunk_idx": self._pseudo_latent_chunk_idx,
             "last_chunk_profile": self.last_chunk_profile,
+            "shared_vae_stream": getattr(self, "_shared_vae_stream", False),
             "devices": {
                 "dit": str(self.device),
                 "vae_encode": str(_module_device(self.pipeline.vae)),
@@ -1515,6 +1660,16 @@ class JoyOmniV2VStreamingSession:
                 continue
         self._inc_debug_counter("submitted_chunks")
         self.chunk_idx += 1
+
+    def work_status(self):
+        """Small, lock-consistent snapshot for the session watchdog."""
+        with self._debug_lock:
+            counters = self._debug_counters
+            pending = int(counters.get("submitted_chunks", 0)) - int(counters.get("returned_results", 0))
+            progress = tuple(int(counters.get(k, 0)) for k in (
+                "encoded_chunks", "denoised_chunks", "decoded_pixel_chunks",
+                "pseudo_encoded_chunks", "postprocessed_chunks", "returned_results"))
+        return pending, progress
 
     def inflight_chunks(self) -> int:
         with self._debug_lock:
@@ -1572,6 +1727,7 @@ class JoyOmniV2VStreamingSession:
                         job.source_frames,
                         profile=job.profile,
                         chunk_idx=job.chunk_idx,
+                        source_job=job,
                     )
                     ready = _record_ready_event()
                 self._timer_record(job.profile, "reference_prepare_s", started)
@@ -1691,7 +1847,8 @@ class JoyOmniV2VStreamingSession:
                     if self._pseudo_stream is not None else nullcontext()
                 )
                 with _ps_stream_ctx:
-                    _consume_on_current_stream(decoded.ready_event, decoded.decoded_pixels)
+                    _consume_on_current_stream(decoded.ready_event, decoded.decoded_pixels,
+                                               decoded.job.source_pixels)
                     self._encode_next_decode_pseudo_latent(
                         decoded.decoded_pixels,
                         profile=decoded.job.profile,
@@ -1727,6 +1884,7 @@ class JoyOmniV2VStreamingSession:
                         decoded.decoded_pixels,
                         profile=decoded.job.profile,
                         chunk_idx=decoded.job.chunk_idx,
+                        source_pixels=decoded.job.source_pixels,
                     )
 
                 n_out = len(packed)
@@ -1765,11 +1923,12 @@ class JoyOmniV2VStreamingSession:
         *,
         profile: dict[str, Any] | None = None,
         chunk_idx: int | None = None,
+        source_job=None,
     ) -> torch.Tensor:
         chunk_idx = self.chunk_idx if chunk_idx is None else chunk_idx
         if chunk_idx == 0:
             started = self._timer_start()
-            source_window = self._frames_to_tensor(source_frames[:1])
+            source_window = self._frames_to_tensor(source_frames[:1], source_job=source_job)
             if profile is not None:
                 self._timer_record(profile, "frames_to_tensor_s", started)
         else:
@@ -1780,7 +1939,7 @@ class JoyOmniV2VStreamingSession:
                     f"Expected {self.ffactor_t} frames after the first chunk, got {len(source_frames)}."
                 )
             started = self._timer_start()
-            new_frames = self._frames_to_tensor(source_frames)
+            new_frames = self._frames_to_tensor(source_frames, source_job=source_job)
             prev = self.prev_source_frame
             if prev.device != new_frames.device:
                 prev = prev.to(new_frames.device)
@@ -1798,7 +1957,7 @@ class JoyOmniV2VStreamingSession:
 
         _enc_dev_type = torch.device(encode_device).type
         _enc_ctx = _autocast_ctx(_enc_dev_type, self.vae_dtype, self.vae_autocast_enabled)
-        with _enc_ctx:
+        with self._vae_submission(self.pipeline.vae), _enc_ctx, self.runtime.stage_timings.measure('vae_encode', encode_device, chunk_idx):
             ref_latent = self.pipeline._sample_vae_latents(
                 source_window,
                 enable_denormalization=self.enable_denormalization,
@@ -1868,7 +2027,7 @@ class JoyOmniV2VStreamingSession:
         decode_input = _vc.prep_input(decode_input)
 
         vae_ctx = _autocast_ctx(vae_device_type, self.vae_dtype, self.vae_autocast_enabled)
-        with vae_ctx:
+        with self._vae_submission(decode_vae), vae_ctx, self.runtime.stage_timings.measure('vae_decode', vae_device, chunk_idx):
             started = self._timer_start(vae_device)
             chunk_decoded = decode_vae.decode(decode_input, return_dict=False)[0]
             if profile is not None:
@@ -1896,7 +2055,7 @@ class JoyOmniV2VStreamingSession:
         _vc.maybe_setup_encode(pseudo_vae)
         prev_pixels = _vc.prep_input(prev_pixels)
         vae_ctx = _autocast_ctx(pseudo_device_type, self.vae_dtype, self.vae_autocast_enabled)
-        with vae_ctx:
+        with self._vae_submission(pseudo_vae), vae_ctx, self.runtime.stage_timings.measure('vae_pseudo', pseudo_device, chunk_idx):
             pseudo_enc = pseudo_vae.encode(prev_pixels)
             if hasattr(pseudo_enc, "latent_dist"):
                 pseudo_latent = pseudo_enc.latent_dist.sample()
@@ -1913,6 +2072,7 @@ class JoyOmniV2VStreamingSession:
         *,
         profile: dict[str, Any] | None = None,
         chunk_idx: int,
+        source_pixels=None,
     ) -> list[bytes]:
         post_device = self.postprocess_device
 
@@ -1927,6 +2087,18 @@ class JoyOmniV2VStreamingSession:
             .permute(1, 2, 3, 0)
             .contiguous()
         )
+        from .shader_strength import mix_shader_presentation
+        strength = (profile or {}).get('shader_strength', {})
+        frames_u8 = mix_shader_presentation(frames_u8, source_pixels, strength)
+        if profile is not None:
+            profile['shader_presentation'] = {
+                'mix': strength.get('outputMix', 0),
+                'previousMix': strength.get('outputMixPrevious', 0),
+                'rawSource': strength.get('outputMix') == strength.get('outputMixPrevious') == 1,
+                'gpuMix': frames_u8.is_cuda,
+                'additionalDownloadBytes': 0,
+                'source': 'matched native input before RIFE/upscaling',
+            }
         if (self.runtime.lossless_output or self.settings.output_codec == "h264"
                 or getattr(self.runtime, "raw_presentation_output", False)):
             return list(frames_u8.cpu().numpy())
@@ -1969,13 +2141,13 @@ class JoyOmniV2VStreamingSession:
     def _next_selected_chunk_ids(self, chunk_idx: int | None = None) -> list[int]:
         chunk_idx = self.chunk_idx if chunk_idx is None else chunk_idx
         next_total = chunk_idx + 2
-        windows = self.pipeline._get_chunk_windows(
+        window = self.pipeline._get_last_chunk_window(
             total_latent_frames=next_total,
             chunk_size=self.chunk_size,
             window_size=self.local_window_size,
             global_sink_chunk=self.global_sink_chunk,
         )
-        return list(windows[-1]["selected_chunk_ids"])
+        return list(window["selected_chunk_ids"])
 
     def _resize_frame(self, frame: Image.Image) -> Image.Image:
         frame = frame.convert("RGB")
@@ -1984,12 +2156,14 @@ class JoyOmniV2VStreamingSession:
         resampling = getattr(Image, "Resampling", Image).BICUBIC
         return frame.resize((self.settings.width, self.settings.height), resampling)
 
-    def _frames_to_tensor(self, frames: list[Image.Image]) -> torch.Tensor:
+    def _frames_to_tensor(self, frames: list[Image.Image], *, source_job=None) -> torch.Tensor:
         arrays = [np.asarray(self._resize_frame(frame), dtype=np.uint8) for frame in frames]
         u8 = torch.from_numpy(np.stack(arrays, axis=0))
         if torch.cuda.is_available():
             encode_device = _module_device(self.pipeline.vae)
             if encode_device.type == "cuda":
                 u8 = u8.to(encode_device, non_blocking=True)
+        if source_job is not None:
+            source_job.source_pixels = u8
         pixel = rearrange(u8, "t h w c -> 1 c t h w").to(torch.float32)
         return pixel / 127.5 - 1.0

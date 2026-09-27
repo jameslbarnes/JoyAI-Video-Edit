@@ -1,6 +1,114 @@
+# Combined shader control - September 26, 2026
+
+The current opt-in `combined` mode coordinates reference conditioning, starting
+latent blend, and a display-only shader fade. Initial curve:
+
+| Dial | Reference gain | Starting blend | Shader display mix |
+|---|---:|---:|---:|
+| 0% | 0 | 0 | 0 |
+| 30% | .5 | 0 | 0 |
+| 60% | 1 | 0 | 0 |
+| 75% | 1 | .00198 | 0 |
+| 90% | 1 | .03164 | 0 |
+| 95% | 1 | .05862 | .5 |
+| 100% | 1 | .1 | 1 |
+
+Reference is min(value/.6, 1). Starting blend above .6 is
+.1 * ((value-.6)/.4)^4. The final .9..1 display mix is smoothstep. These are model
+input units, not a claim of linear perceptual adherence. 60% exactly matches the
+prior reference-only 100% / legacy direct-blend 0% model parameters.
+
+At 100%, native display frames are the actual captured/resized shader RGB pixels,
+bypassing JoyAI's generated pixels. Normal RIFE interpolation, VSR upscaling and
+video encoding still apply. This is not an uncompressed 4K source bypass or a
+zero-latency path. The retained GPU source upload is matched to each generated
+chunk; the fade adds no GPU-to-CPU download or new input upload. Existing native
+model-to-output transfer stays unchanged.
+
+The display fade happens in the packing worker, after the generated pixels have
+branched to the pseudo encoder. It never modifies generated KV/VAE history.
+Generation continues at 100%, so returning to the generated view needs no session
+restart. The starting blend itself does affect generated history, as before.
+Zero removes fresh shader input, but existing history remains until explicit Reset.
+
+The dial and model inputs ramp by at most .125 per chunk. Display mixing ramps
+per native frame and is then interpolated by RIFE, avoiding a second slow chunk
+ramp. A full-range change takes about six seconds plus pipeline buffering.
+`shader_strength` metadata reports all actual inputs; `shader_presentation.rawSource`
+becomes true only for a fully raw chunk. No graph recapture occurs on dial moves.
+
+Startup mode/value live in `tulip/shader-strength.json`. Normal SDK strength writes
+keep their existing value-only contract; the phone range follows observed mode.
+Both old modes remain available via the existing loopback `/strength` endpoint:
+`{"mode":"reference_only","value":1}` restores the earlier reference trial, or
+`{"mode":"direct_latent_blend","value":0}` restores the original baseline. Write
+the matching JSON to the startup file to persist a selected mode. No auto rollback.
+
+Evidence: `tulip/combined-strength-current.txt`; tests cover curve endpoints,
+smoothing/mode switches, byte-exact source selection in the actual packing path,
+unchanged generated history, and native-size GPU blending without downloads.
+The sibling radio sweep accepts `--combined` and returns to its initial value.
+The attempted combined live sweep did not connect to CDP and changed no settings;
+it is not a passing live endpoint test. The native-size GPU endpoint and actual
+packing path passed deterministic tests. The combined runtime, radio range and
+SDK metadata are live; the operator's subsequent dial/scene changes were retained.
+
+Read-only timing after the operator reported jitter: the 4K publisher delivered
+1,405 frames in 58.56 seconds (23.994 fps), without new drops, underruns, restarts
+or logged delivery gaps. A separate 35-second radio sample had 7 of 848 intervals
+over 70 ms, p95 54.4 ms and maximum 92.1 ms, with zero buffer underruns. The prior
+September 24 sample had 6 of 2,904 over 70 ms, p95 52.6 ms and maximum 87.2 ms.
+This suggests slightly worse preview scheduling in these samples; different
+scenes and observation windows prevent attribution to this change. A 25-second
+local WebRTC probe decoded 4K at 24 fps without packet loss, decoder drops or
+reported freezes, while compositor callbacks still had gaps up to 83.4 ms.
+Neither test measures the phone/TV panel or generated motion coherence.
+
+The sections below record previous controls and trials.
+
 # JoyAI shader influence — September 11, 2026
 
-## Direct Flux-unit slider (supersedes the mapping below)
+## Reference-only trial - September 26, 2026
+
+`tulip/shader-strength.json` selects startup mode and value. Missing file keeps
+the original direct-latent-blend behavior. The opt-in `reference_only` mode maps
+`referenceGain = value`, keeps starting-noise blend at zero, and preserves temporal
+history. Full reference (`value=1`) has identical model inputs to legacy zero blend.
+Zero substitutes an all-zero reference tensor, independent of fresh shader content.
+Reference tokens remain present; this is not a trained text-to-video mode, and
+generated history can retain past shader patterns. Quality is not guaranteed to
+change monotonically with the dial.
+
+Both mode changes and dial moves limit actual blend and reference gain changes to
+0.125 per native chunk. At 12 fps with eight-frame chunks, a full-range move takes
+about 5.3 seconds plus delivery buffering. No graph recapture, model reload, or
+session reset is needed for subsequent moves. Loading the implementation requires
+one runtime restart. The same strength controller persists across explicit Reset.
+
+The existing loopback POST `/strength` also accepts optional `mode` for operator
+experiments and rollback. Normal SDK/browser writes remain `{value}` and retain
+the active mode. Mode changes through HTTP are live only; write the matching startup
+config explicitly to persist a chosen mode. No automatic rollback is installed.
+
+Rollback to the old zero-blend baseline without interrupting output:
+`POST /strength {"mode":"direct_latent_blend","value":0}` and save that same JSON
+to `tulip/shader-strength.json`. This restores parameters, not earlier pixels/history.
+To restore a different prior value, use the saved `strength-before.json` target.
+
+The radio slider exposes 0..1 in reference mode. SDK `model.primary.status` derives
+`strengthUiMax=1` from live mode; the iOS source already consumes this field. Its
+quadratic gesture curve remains UI-only. Legacy mode retains its prior 0.3 mobile
+maximum. No SDK endpoint, action, or response-envelope changes were introduced.
+
+Validation: `tulip/test_shader_dial.py` covers source independence at zero, exact
+full-reference identity, smoothing, mode rollback, and startup config validation.
+The sibling radio script `scripts/smoke-tests/joyai-reference-strength.cjs` captures
+a bounded live sweep without changing scene or shader. Evidence location is in
+`tulip/reference-strength-current.txt`. See its result for actual deployment status.
+
+The sections below describe historical controls and experiments.
+
+## Historical direct Flux-unit slider
 
 The runtime now uses `blend = value`, `referenceGain = 1`, neutral/default **0**.
 10% means a 0.10 source/noise latent blend, using the same initialization equation

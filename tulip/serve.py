@@ -14,6 +14,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--port", type=int, default=7873)
 options = parser.parse_args()
 preset = json.loads((ROOT / "tulip/presets/etherea-continuous-v2.json").read_text())
+from xvideo.serving.native_config import load_native_config
+native_quality = load_native_config()
+preset['start'].update({k: native_quality[k] for k in ('width', 'height', 'fps')})
 
 import torch
 import uvicorn
@@ -36,16 +39,27 @@ args = build_parser().parse_args([
     "--dit-ckpt", str(models / "JoyAI-Video-Edit/dit/joyai_video_edit_dit_0811.pth"),
     "--vae-ckpt", str(models / "JoyAI-Video-Edit/vae"),
     "--text-encoder-ckpt", str(models / "MiMo-VL-7B-RL-2508"),
-    "--device", "cuda:0", "--vae-device", "cuda:0",
-    "--height", "360", "--width", "648", "--fps", "16",
+    "--device", "cuda:0", "--vae-device", os.environ.get('JOYAI_VAE_DEVICE', 'cuda:0'),
+    "--vae-encode-device", os.environ.get('JOYAI_VAE_ENCODE_DEVICE', os.environ.get('JOYAI_VAE_DEVICE', 'cuda:0')),
+    "--vae-pseudo-device", os.environ.get('JOYAI_VAE_PSEUDO_DEVICE', os.environ.get('JOYAI_VAE_DEVICE', 'cuda:0')),
+    # Packing stays alongside decode: moving only the single-frame pseudo
+    # encoder should not copy every decoded frame to the other GPU as float32.
+    "--postprocess-device", os.environ.get('JOYAI_VAE_DEVICE', 'cuda:0'),
+    "--height", str(native_quality['height']), "--width", str(native_quality['width']), "--fps", str(native_quality['fps']),
     "--num-inference-steps", "2", "--seed", "42",
     "--no-use-pe", "--no-online-gate", "--no-freeze-kv-on-static",
     "--kv-reset-frames", "0", "--max-temporal-ids", str(preset["start"]["max_temporal_ids"]),
     "--output-quality", "95", "--uplink-codec", "mjpeg",
-    "--downlink-codec", "mjpeg", "--profile-timings", "--no-prebake-graph",
+    "--downlink-codec", "mjpeg", "--no-profile-timings", "--no-prebake-graph",
     "--prompt", preset["prompt"],
 ])
 app = create_app(args)
+from xvideo.serving.shader_strength import ShaderStrength, load_strength_config
+app.state.shader_strength = ShaderStrength(**load_strength_config(ROOT / 'tulip/shader-strength.json'))
+
+@app.get('/native-config')
+def native_config():
+    return native_quality
 
 
 class LocalPreset:
@@ -73,9 +87,18 @@ class LocalPreset:
                 except (ValueError, TypeError):
                     return message
                 if isinstance(payload, dict) and payload.get("type") == "start":
+                    # Configuration changes take effect only at an explicit new
+                    # session. The single-session service keeps weights resident.
+                    updated = load_native_config()
+                    native_quality.update(updated)
+                    args.width, args.height, args.fps = updated['width'], updated['height'], updated['fps']
+                    preset['start'].update({k: updated[k] for k in ('width', 'height', 'fps')})
                     payload = {**preset["start"], "prompt": str(payload.get("prompt") or preset["prompt"])[:12000],
+                               "profile_timings": False,
                                "scene_token": payload.get("scene_token"),
-                               "rife_multiplier": 2 if payload.get("rife_multiplier") == 2 else 1}
+                               "ref_image": payload.get("ref_image") if isinstance(payload.get("ref_image"), str) and len(payload["ref_image"]) <= 4 * 1024 * 1024 else None,
+                               "rife_multiplier": native_quality['rife_multiplier'] if (ROOT / 'tulip/native-quality.json').exists()
+                                   else payload["rife_multiplier"] if payload.get("rife_multiplier") in (2, 4) else 1}
                     message = {**message, "text": json.dumps(payload)}
             return message
 

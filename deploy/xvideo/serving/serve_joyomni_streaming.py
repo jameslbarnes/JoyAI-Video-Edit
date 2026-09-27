@@ -27,6 +27,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from PIL import Image
 import uvicorn
 
+from xvideo.serving.session_watchdog import SessionWatchdog
 from xvideo.serving.pe import DEFAULT_MODEL as DEFAULT_PE_MODEL
 from xvideo.serving.joyomni_streaming import (
     JoyOmniRuntime,
@@ -642,6 +643,7 @@ def create_app(args: argparse.Namespace) -> FastAPI:
     from xvideo.serving.shader_strength import ShaderStrength
     app.state.shader_strength = ShaderStrength()
     app.state.ws_debug = {}
+    app.state.shader_bridges = {}
 
     app.state.session_gate = SessionGate()
 
@@ -714,6 +716,7 @@ def create_app(args: argparse.Namespace) -> FastAPI:
 
     @app.get("/debug")
     def debug() -> JSONResponse:
+        from .memory_status import memory_status
         session = getattr(app.state, "active_session", None)
         session_debug = session.debug_snapshot() if session is not None else None
         return JSONResponse(
@@ -723,8 +726,15 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                 "runtime_loaded": app.state.runtime is not None,
                 "ws": getattr(app.state, "ws_debug", {}),
                 "session": session_debug,
+                "memory": memory_status(app.state.runtime),
+                "stage_timings": app.state.runtime.stage_timings.snapshot() if app.state.runtime is not None else None,
             }
         )
+
+    @app.get("/debug/stacks")
+    def debug_stacks() -> JSONResponse:
+        from .memory_status import thread_stacks
+        return JSONResponse({'ok': True, 'ts': time.time(), 'threads': thread_stacks()})
 
     @app.get("/strength")
     def strength_status() -> JSONResponse:
@@ -736,7 +746,7 @@ def create_app(args: argparse.Namespace) -> FastAPI:
         if app.state.active_session is None:
             return JSONResponse({'ok': False, 'error': 'no active JoyAI session'}, status_code=409)
         try:
-            state = app.state.shader_strength.set(payload.get('value'))
+            state = app.state.shader_strength.set(payload.get('value'), mode=payload.get('mode'))
             return JSONResponse({'ok': True, 'strength': state, 'status': 'queued'})
         except ValueError as exc:
             return JSONResponse({'ok': False, 'error': str(exc)}, status_code=400)
@@ -804,6 +814,34 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                     except OSError:
                         pass
 
+    @app.websocket("/ws/shader-bridge/{token}")
+    async def shader_bridge_endpoint(websocket: WebSocket, token: str) -> None:
+        from .live_shader_bridge import LiveShaderBridge
+        if len(token) != 36 or any(c not in '0123456789abcdef-' for c in token) or len(app.state.shader_bridges) >= 2:
+            await websocket.close(code=1008)
+            return
+        await websocket.accept()
+        bridge = LiveShaderBridge()
+        app.state.shader_bridges[token] = bridge
+        started = time.perf_counter()
+        try:
+            while time.perf_counter()-started < 25:
+                jpeg = await asyncio.wait_for(websocket.receive_bytes(), timeout=2)
+                await asyncio.to_thread(bridge.publish, jpeg)
+                # One outstanding frame: a slow decoder backpressures capture,
+                # never builds a stale shader queue behind model initialization.
+                await websocket.send_json({'type': 'shader_ack'})
+        except (WebSocketDisconnect, asyncio.TimeoutError, ValueError, RuntimeError, OSError):
+            pass
+        finally:
+            if app.state.shader_bridges.get(token) is bridge:
+                del app.state.shader_bridges[token]
+            app.state.ws_debug['last_shader_bridge'] = bridge.status()
+            try:
+                await websocket.close()
+            except RuntimeError:
+                pass
+
     @app.websocket("/ws")
     async def websocket_endpoint(websocket: WebSocket) -> None:
         await websocket.accept()
@@ -837,10 +875,13 @@ def create_app(args: argparse.Namespace) -> FastAPI:
         reset_count = 0
         next_frame_meta: dict[str, Any] | None = None
         send_lock = asyncio.Lock()
+        presentation_work = {"pending": 0, "completed": 0}
+        watchdog = SessionWatchdog(stall_timeout=max(args.push_frame_timeout_s, args.first_frame_timeout_s))
         stop_output_pump = asyncio.Event()
         output_task: asyncio.Task[None] | None = None
         scene_task = None
         prepared_scene = None
+        live_scene_transition = False
         scene_serial = 0
         rife = None
         rife_multiplier = 1
@@ -855,6 +896,8 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                 await _send_json({"type": "scene_prepared", "token": token,
                                   "prepare_s": time.perf_counter() - started})
             except Exception as exc:
+                if app.state.upscaler is not None:
+                    app.state.upscaler.cancel_transition()
                 await _send_json({"type": "scene_error", "message": str(exc)})
 
         flow = {"recv": None, "at": 0.0, "dropped": 0, "congested": False,
@@ -910,6 +953,8 @@ def create_app(args: argparse.Namespace) -> FastAPI:
             source_metas: list[dict[str, Any]],
             profile: dict[str, Any],
             server_elapsed: float,
+            *,
+            already_interpolated: bool = False,
         ) -> int:
             nonlocal frames_out
             if not encoded_frames:
@@ -917,16 +962,28 @@ def create_app(args: argparse.Namespace) -> FastAPI:
 
             if gate_state.get("absent_hold"):
                 return 0
-            if rife_multiplier == 2 and encoded_frames and (isinstance(encoded_frames[0], bytes) or app.state.upscaler is not None):
+            profile['presentation_fps'] = max(1.0, float(args.fps)) * rife_multiplier
+            after_enhancement = app.state.upscaler is not None and app.state.upscaler.interpolation_after()
+            if after_enhancement:
+                encoded_frames = await asyncio.to_thread(
+                    runtime.run_presentation, app.state.upscaler.process, encoded_frames, profile, output_quality, raw_output=True)
+            if not already_interpolated and rife_multiplier in (2, 4) and encoded_frames and (isinstance(encoded_frames[0], bytes) or app.state.upscaler is not None):
                 if not source_metas:
                     source_metas = [{} for _ in encoded_frames]
                 encoded_frames, source_metas = await asyncio.to_thread(
-                    rife.process, encoded_frames, source_metas, profile, output_quality,
-                    raw_output=app.state.upscaler is not None,
+                    runtime.run_presentation, rife.process, encoded_frames, source_metas, profile, output_quality,
+                    raw_output=app.state.upscaler is not None, multiplier=rife_multiplier,
+                    gpu_output=(not after_enhancement and app.state.upscaler is not None and
+                                app.state.upscaler.gpu_interpolation_enabled(rife.device)),
                     transition_source=getattr(session, "_latest_source_frame", None) if rife.transition_pending else None)
-            if app.state.upscaler is not None:
+            if after_enhancement:
                 encoded_frames = await asyncio.to_thread(
-                    app.state.upscaler.process, encoded_frames, profile, output_quality)
+                    runtime.run_presentation, app.state.upscaler.encode_frames, encoded_frames, output_quality, profile)
+            elif app.state.upscaler is not None:
+                encoded_frames = await asyncio.to_thread(
+                    runtime.run_presentation, app.state.upscaler.process, encoded_frames, profile, output_quality)
+            engine=profile.get('interpolation_backend','rife')
+            profile['output_order'] = 'sr_nr_'+engine if after_enhancement else engine+'_sr_nr'
             count = len(encoded_frames)
             if not source_metas:
                 source_metas = [{} for _ in range(count)]
@@ -1153,6 +1210,41 @@ def create_app(args: argparse.Namespace) -> FastAPI:
             )
 
         async def _output_pump(session_ref) -> None:
+            work = presentation_work
+            from xvideo.serving.presentation_pipeline import finish_thread, ordered_prefetch
+            pipeline_interpolation = (rife_multiplier in (2, 4) and rife is not None and
+                app.state.upscaler is not None and not app.state.upscaler.interpolation_after())
+
+            async def prepare_next():
+                while not stop_output_pump.is_set():
+                    try:
+                        result = await asyncio.to_thread(session_ref.wait_async_result, 0.05)
+                    except Exception as exc:
+                        await _send_json({"type": "error", "message": repr(exc)})
+                        return None
+                    if result is None or not result.jpegs:
+                        continue
+                    work["pending"] += 1
+                    pixels = result.jpegs
+                    metas = result.source_metas or [{} for _ in pixels]
+                    if result.valid_count is not None:
+                        pixels, metas = pixels[:result.valid_count], metas[:result.valid_count]
+                    pixels, metas = await finish_thread(runtime.run_interpolation,
+                        rife.process, pixels, metas, result.profile, output_quality,
+                        raw_output=True, multiplier=rife_multiplier,
+                        gpu_output=app.state.upscaler.gpu_interpolation_enabled(rife.device),
+                        transition_source=getattr(session_ref, "_latest_source_frame", None) if rife.transition_pending else None)
+                    return pixels, metas, result.profile, float(result.elapsed or 0.0)
+                return None
+
+            async def consume_prepared(item):
+                await _send_encoded_frames(*item, already_interpolated=True)
+                work["pending"] -= 1
+                work["completed"] += 1
+
+            if pipeline_interpolation:
+                await ordered_prefetch(prepare_next, consume_prepared, stop_output_pump)
+                return
             while not stop_output_pump.is_set():
                 try:
                     result = await asyncio.to_thread(session_ref.wait_async_result, 0.05)
@@ -1162,6 +1254,7 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                 if result is None:
                     continue
                 if result.jpegs:
+                    work["pending"] += 1
                     jpegs = result.jpegs
                     source_metas = result.source_metas or [{} for _ in jpegs]
                     if result.valid_count is not None:
@@ -1170,6 +1263,8 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                     await _send_encoded_frames(
                         jpegs, source_metas, result.profile, float(result.elapsed or 0.0)
                     )
+                    work["pending"] -= 1
+                    work["completed"] += 1
 
         def _create_session():
             if session_settings is None:
@@ -1225,7 +1320,9 @@ def create_app(args: argparse.Namespace) -> FastAPI:
             with app.state.inference_lock:
                 session_ref.close()
 
-        async def _close_session_safely(session_ref, reason: str) -> None:
+        async def _close_session_safely(session_ref, reason: str, *, preserve_direct=False) -> None:
+            if app.state.upscaler is not None:
+                await asyncio.to_thread(app.state.upscaler.close_presentation, preserve=preserve_direct)
             try:
                 await asyncio.wait_for(
                     asyncio.to_thread(_close_session_sync, session_ref),
@@ -1328,7 +1425,9 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                 pe_task = None
 
         def _start_output_task(session_ref) -> None:
-            nonlocal output_task
+            nonlocal output_task, presentation_work, watchdog
+            presentation_work = {"pending": 0, "completed": 0}
+            watchdog = SessionWatchdog(stall_timeout=max(args.push_frame_timeout_s, args.first_frame_timeout_s))
             if session_settings is not None:
                 stop_output_pump.clear()
                 output_task = asyncio.create_task(_output_pump(session_ref))
@@ -1384,12 +1483,28 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                 if frames_out != last_frames_out or pe_task is not None:
                     last_frames_out = frames_out
                     last_activity = time.monotonic()
-                if time.monotonic() - last_activity >= HOLDER_IDLE_TIMEOUT_S:
+                pending_chunks, worker_progress = session.work_status() if session is not None else (0, ())
+                pending = (pending_chunks > 0 or presentation_work["pending"] > 0 or
+                           pe_task is not None or
+                           (session is not None and frames_in > 0 and frames_out == 0))
+                timeout_reason = watchdog.check(now=time.monotonic(), last_activity=last_activity,
+                    pending=pending,
+                    progress=(*worker_progress, frames_out, presentation_work["completed"]))
+                ws_debug["watchdog"] = {"pending_chunks": pending_chunks,
+                    "presentation_pending": presentation_work["pending"], "reason": timeout_reason}
+                if timeout_reason:
+                    if timeout_reason == "stalled":
+                        from xvideo.serving.memory_status import thread_stacks
+                        ws_debug["stall_snapshot"] = session.debug_snapshot() if session is not None else None
+                        print("#####[WS-GUARD] processing stalled: " + json.dumps({
+                            "session": ws_debug["stall_snapshot"], "threads": thread_stacks()}), flush=True)
                     try:
                         await _send_json(
                             {
-                                "type": "session_timeout",
-                                "message": f"released after {HOLDER_IDLE_TIMEOUT_S:.0f}s idle; reconnect to re-queue",
+                                "type": "error" if timeout_reason == "stalled" else "session_timeout",
+                                "message": (f"processing stalled for {watchdog.stall_timeout:.0f}s with work outstanding"
+                                            if timeout_reason == "stalled" else
+                                            f"released after {HOLDER_IDLE_TIMEOUT_S:.0f}s idle; reconnect to re-queue"),
                             }
                         )
                     except Exception:
@@ -1422,7 +1537,7 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                             print("#####[RESTART] tearing down prior session: stop_output_task", flush=True)
                             await _stop_output_task()
                             print("#####[RESTART] close_session", flush=True)
-                            await _close_session_safely(session, "restart")
+                            await _close_session_safely(session, "restart", preserve_direct=token is not None)
                             print("#####[RESTART] prior session closed OK", flush=True)
                             if getattr(app.state, "active_session", None) is session:
                                 app.state.active_session = None
@@ -1561,12 +1676,12 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                         session = _create_session()
                         session._initial_prompt_embeds = initial_embeds
                         requested_rife = int(payload.get("rife_multiplier", 1))
-                        rife_multiplier = 2 if requested_rife == 2 and os.environ.get("JOYAI_RIFE_FLUX_ROOT") else 1
-                        if rife_multiplier == 2 and rife is None:
-                            from xvideo.serving.rife_output import RifeOutput
-                            rife = await asyncio.to_thread(RifeOutput, args.device)
+                        rife_multiplier = requested_rife if requested_rife in (2, 4) and os.environ.get("JOYAI_RIFE_FLUX_ROOT") else 1
+                        if rife_multiplier in (2, 4) and rife is None:
+                            from xvideo.serving.interpolation_output import InterpolationOutput
+                            rife = await asyncio.to_thread(InterpolationOutput, os.environ.get('JOYAI_RIFE_DEVICE', args.device))
                         if rife is not None:
-                            rife.reset(transition=token is not None and rife_multiplier == 2)
+                            rife.reset(transition=token is not None and rife_multiplier in (2, 4) and not live_scene_transition)
                         print("#####[RESTART] new session created; sending 'started'", flush=True)
                         app.state.active_session = session
                         frames_since_session_reset = 0
@@ -1584,14 +1699,17 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                         await _send_json(
                             {
                                 "type": "started",
+                                "direct_ndi": app.state.upscaler.direct_status() if app.state.upscaler else {"enabled": False},
                                 "scene_prepare_supported": True,
-                                "scene_morph_supported": rife_multiplier == 2,
+                                "scene_morph_supported": rife_multiplier in (2, 4) and not live_scene_transition and rife.supports_scene_morph,
+                                "interpolation_backend": rife.backend if rife is not None else 'none',
+                                "live_shader_bridge_supported": True,
                                 "rife_supported": bool(os.environ.get("JOYAI_RIFE_FLUX_ROOT")),
                                 "rife_multiplier": rife_multiplier,
                                 "output_fps": float(args.fps) * rife_multiplier,
                                 "upscale": app.state.upscaler.status() if app.state.upscaler else {"supported": False, "enabled": False},
-                                "output_width": session_settings.width * (2 if app.state.upscaler and app.state.upscaler.enabled else 1),
-                                "output_height": session_settings.height * (2 if app.state.upscaler and app.state.upscaler.enabled else 1),
+                                "output_width": app.state.upscaler.output_size[1] if app.state.upscaler and app.state.upscaler.enabled else session_settings.width,
+                                "output_height": app.state.upscaler.output_size[0] if app.state.upscaler and app.state.upscaler.enabled else session_settings.height,
                                 "frames_per_next_chunk": session.frames_per_next_chunk,
                                 "height": session_settings.height,
                                 "width": session_settings.width,
@@ -1696,7 +1814,7 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                         try:
                             if session is None:
                                 raise ValueError('no active session')
-                            state = app.state.shader_strength.set(payload.get('value'))
+                            state = app.state.shader_strength.set(payload.get('value'), mode=payload.get('mode'))
                             await _send_json({'type': 'strength_queued', 'strength': state})
                         except ValueError as exc:
                             await _send_json({'type': 'strength_error', 'message': str(exc)})
@@ -1710,6 +1828,13 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                         else:
                             scene_serial += 1
                             prepared_scene = None
+                            bridge = app.state.shader_bridges.get(payload.get('live_shader_token'))
+                            live_scene_transition = bridge is not None and bridge.latest() is not None
+                            if app.state.upscaler is not None and app.state.upscaler.direct_requested:
+                                app.state.upscaler.begin_transition(
+                                    (lambda bridge=bridge: bridge.latest()) if live_scene_transition else
+                                    (lambda: getattr(session, "_latest_source_frame", None)),
+                                    moving=live_scene_transition)
                             scene_task = asyncio.create_task(_prepare_scene(session, prompt, scene_serial))
                         continue
                     elif msg_type == "set_upscale":
@@ -1723,13 +1848,13 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                         continue
                     elif msg_type == "set_rife":
                         requested = int(payload.get("multiplier", 1))
-                        if requested not in (1, 2) or requested == 2 and not os.environ.get("JOYAI_RIFE_FLUX_ROOT"):
+                        if requested not in (1, 2, 4) or requested in (2, 4) and not os.environ.get("JOYAI_RIFE_FLUX_ROOT"):
                             await _send_json({"type": "interpolation_error", "message": "RIFE is unavailable or multiplier is unsupported"})
                             continue
                         await _stop_output_task()
-                        if requested == 2 and rife is None:
-                            from xvideo.serving.rife_output import RifeOutput
-                            rife = await asyncio.to_thread(RifeOutput, args.device)
+                        if requested in (2, 4) and rife is None:
+                            from xvideo.serving.interpolation_output import InterpolationOutput
+                            rife = await asyncio.to_thread(InterpolationOutput, os.environ.get('JOYAI_RIFE_DEVICE', args.device))
                         if rife is not None:
                             rife.reset()
                         rife_multiplier = requested
@@ -2002,25 +2127,30 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                             ws_debug["frames_dropped_backpressure"] = (
                                 int(ws_debug.get("frames_dropped_backpressure", 0)) + 1
                             )
-                            return session._drain_async_results()
+                            return []  # The output pump owns completed chunks.
 
                         _rec_i = rec_input
                         if _rec_i is not None:
                             _rec_i.submit(frame, frame_meta.get("t_capture_ms"))
                             ws_debug["rec_in_written"] = _rec_i.frames_written
                             ws_debug["rec_in_dropped"] = _rec_i.frames_dropped_recording
-                        return session.push_frame(frame, frame_meta=frame_meta)
+                        # Keep input reception independent of RIFE/SR delivery.
+                        # A single consumer also preserves presentation order.
+                        return session.push_frame(frame, frame_meta=frame_meta, drain_results=False)
                     finally:
                         app.state.inference_lock.release()
 
                 started = time.time()
+                push_timeout = max(0.1, float(args.push_frame_timeout_s))
+                if not session.initialized:
+                    push_timeout = max(push_timeout, float(args.first_frame_timeout_s))
                 try:
                     chunk_results = await asyncio.wait_for(
                         asyncio.to_thread(_run_frame),
-                        timeout=max(0.1, float(args.push_frame_timeout_s)),
+                        timeout=push_timeout,
                     )
                 except asyncio.TimeoutError:
-                    msg = f"push_frame timeout after {args.push_frame_timeout_s:.1f}s"
+                    msg = f"push_frame timeout after {push_timeout:.1f}s"
                     print(f"#####[WS-GUARD] {msg}", flush=True)
                     await _send_json({"type": "error", "message": msg})
                     break
@@ -2151,6 +2281,8 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                 await _cancel_pe()
                 await _stop_output_task()
                 await asyncio.to_thread(_stop_recorders)
+                if rife is not None:
+                    await asyncio.to_thread(runtime.run_interpolation, rife.close)
                 if session is not None:
                     await _close_session_safely(session, "finally")
                 if getattr(app.state, "active_session", None) is session:
@@ -2222,6 +2354,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--prebake-graph", action=argparse.BooleanOptionalAction, default=True,
                         help="Prebake on a black anchor; disable to capture on the real first input frame.")
     parser.add_argument("--push-frame-timeout-s", type=float, default=15.0, help="Max seconds a single frame submission may block before releasing the WS session gate.")
+    parser.add_argument("--first-frame-timeout-s", type=float, default=120.0, help="Allow cold prompt/kernel initialization before applying the normal frame timeout.")
     parser.add_argument("--max-inflight-chunks", type=int, default=2, help="Drop incoming frames while this many chunks are already in the pipeline (latency governor; pins display latency to ~N chunk periods). 2 keeps glass-to-glass latency low (~1 chunk) and prevents the session-start init stall from building a frame backlog (the 'ramp-up'); higher values buffer more (smoother under hiccups) at the cost of latency and a startup ramp. 0 disables. Overridable per session via the start payload's max_inflight_chunks.")
     parser.add_argument("--session-close-timeout-s", type=float, default=5.0, help="Best-effort session cleanup timeout during WS teardown.")
     parser.add_argument("--inference-lock-timeout-s", type=float, default=5.0, help="Max seconds to wait for the process-wide inference lock.")
