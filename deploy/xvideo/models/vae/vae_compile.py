@@ -1,7 +1,16 @@
 from __future__ import annotations
 
+import os
+import sys
 import torch
 import torch.nn as nn
+
+# Windows C long cannot represent non-default CUDA stream handles in the
+# static launcher (pytorch/pytorch#162430). Use Triton's normal launcher;
+# compilation and autotuning remain enabled, including in streaming workers.
+if sys.platform == 'win32':
+    import torch._inductor.config
+    torch._inductor.config.use_static_cuda_launcher = False
 
 from xvideo.inductor_autotune_fix import install as _install_autotune_fix
 
@@ -75,7 +84,10 @@ def warmup_encode(vae, in_channels: int, h_px: int, w_px: int,
             if use_ac else nullcontext()
         )
         try:
-            with torch.no_grad(), ctx:
+            # Autotuner CUDA events follow the current device. Merely placing
+            # input tensors on another GPU can time the wrong device.
+            device_ctx = torch.cuda.device(device) if dev_type == 'cuda' else nullcontext()
+            with device_ctx, torch.no_grad(), ctx:
                 _ = vae.encode(x)
             if torch.cuda.is_available():
                 torch.cuda.synchronize(device)
@@ -93,6 +105,13 @@ def maybe_setup_encode_dynamic(vae) -> None:
         core = getattr(vae, "encode")
     else:
         raise RuntimeError("VAE has neither _encode nor encode; cannot compile")
+    if os.environ.get('JOYOMNI_COMPILE_REFERENCE', '0' if sys.platform == 'win32' else '1') == '0':
+        # Reference sizes are arbitrary and infrequent. Preserve their eager
+        # latency without affecting compiled native video encoding/decoding.
+        vae._encode_dynamic = getattr(core, '_torchdynamo_orig_callable', core)
+        _configured_encode_dynamic.add(id(vae))
+        print('[vae_compile] reference-image encode stays eager')
+        return
     vae._encode_dynamic = torch.compile(core, mode="max-autotune-no-cudagraphs", dynamic=True)
     _configured_encode_dynamic.add(id(vae))
     print("[vae_compile] compiled vae._encode_dynamic (dynamic=True, reference-image path)")
@@ -143,23 +162,24 @@ def warmup_encode_dynamic(vae, in_channels: int, hw_list, device: torch.device,
 def warmup_decode(vae, latent_channels: int, h_lat: int, w_lat: int,
                   device: torch.device, dtype: torch.dtype,
                   temporal_lens: tuple[int, ...] = (1, 2),
-                  autocast: bool = True) -> None:
+                  autocast: bool = True, input_dtype: torch.dtype | None = None) -> None:
     maybe_setup_decode(vae)
     from contextlib import nullcontext
     dev_type = torch.device(device).type
     use_ac = autocast and dev_type in {"cuda", "cpu"}
     for t in temporal_lens:
-        z = torch.zeros(1, latent_channels, t, h_lat, w_lat, device=device, dtype=dtype)
+        z = torch.zeros(1, latent_channels, t, h_lat, w_lat, device=device, dtype=input_dtype or dtype)
         z = prep_input(z)
         ctx = (
             torch.autocast(device_type=dev_type, dtype=dtype, enabled=True)
             if use_ac else nullcontext()
         )
         try:
-            with torch.no_grad(), ctx:
+            device_ctx = torch.cuda.device(device) if dev_type == 'cuda' else nullcontext()
+            with device_ctx, torch.no_grad(), ctx:
                 _ = vae.decode(z, return_dict=False)[0]
             if torch.cuda.is_available():
                 torch.cuda.synchronize(device)
-            print(f"[vae_compile] warmup compiled decode shape (1,{latent_channels},{t},{h_lat},{w_lat}) autocast={autocast}")
+            print(f"[vae_compile] warmup compiled decode shape (1,{latent_channels},{t},{h_lat},{w_lat}) input_dtype={z.dtype} autocast={autocast}")
         except Exception as exc:  # noqa: BLE001
             print(f"[vae_compile] warmup failed for t={t}: {exc!r}")
