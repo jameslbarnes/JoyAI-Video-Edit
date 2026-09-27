@@ -554,6 +554,10 @@ class JoyOmniV2VStreamingSession:
         self._closing = False
         self._sink_refresh_chunks = max(0, int(os.environ.get("JOYOMNI_SINK_REFRESH_CHUNKS", "0")))
         self._sink_chunk = self._sink_refresh_count = 0
+        self._sink_decay_chunks = 0
+        self._sink_decay_owned = None
+        from .cache_decay import CacheDecay
+        self.cache_decay = CacheDecay()
         self._cache_stats = {}
         from .shader_strength import ShaderStrength
         self.shader_strength = ShaderStrength()
@@ -868,6 +872,35 @@ class JoyOmniV2VStreamingSession:
         print(f"#####[PROMPT] revision={revision} chunk={chunk_idx} encode={self._prompt_encode_s:.3f}s "
               f"apply={profile['prompt_apply_s']:.3f}s cache_preserved=True", flush=True)
 
+    def _decay_sink(self, store, chunk_idx):
+        """Fade the scene's first-chunk sink toward the latest committed chunk (see cache_decay)."""
+        from .cache_decay import chunk_alpha, decay_sink, own_sink, rope_compatible
+        config = self.cache_decay.snapshot()
+        every = config["every_chunks"]
+        chunk_s = self.frames_per_next_chunk / config["native_fps"]
+        alpha = chunk_alpha(config["half_life_s"], chunk_s * every)
+        state = {**config, "alpha": alpha, "chunks": self._sink_decay_chunks, "skipped": None}
+        if alpha <= 0 or chunk_idx < 1 or chunk_idx % every:
+            return state
+        sink_id = self.pipeline._kv_cache_memory_id("clean", 0)
+        sink, current = store.get(sink_id), store.get(self.pipeline._kv_cache_memory_id("clean", chunk_idx))
+        if sink is None or current is None or sink is current:
+            state["skipped"] = "missing"
+            return state
+        if not rope_compatible(sink, current):
+            state["skipped"] = "rope"
+            return state
+        if sink is not self._sink_decay_owned:
+            # The scene's original sink (or a refresh) may alias shared buffers.
+            sink = store[sink_id] = self._sink_decay_owned = own_sink(sink)
+        decay_sink(sink, current, alpha, config["mode"])
+        runner = self.runtime.graph_runners.get(self._graph_key())
+        if runner is not None:
+            runner.pool_dirty = True  # graph pool holds a RoPE'd copy of the sink
+        self._sink_decay_chunks += 1
+        state["chunks"] = self._sink_decay_chunks
+        return state
+
     def _refresh_sink_and_measure(self, chunk_idx, profile):
         store = self.pipeline.transformer._inference_kv_cache.get("cond", {})
         interval = self._sink_refresh_chunks
@@ -883,8 +916,10 @@ class JoyOmniV2VStreamingSession:
                 runner.pool_dirty = True  # re-RoPE the refreshed sink at position 0
             self._sink_chunk = chunk_idx
             self._sink_refresh_count += 1
+        decay = self._decay_sink(store, chunk_idx)
         stats = {"entries": len(store), "sinkChunk": self._sink_chunk,
                  "sinkRefreshes": self._sink_refresh_count, "sinkRefreshChunks": interval,
+                 "sinkDecay": decay,
                  "temporalPosition": profile.get("temporal_position"),
                  "allocatedMiB": torch.cuda.memory_allocated(self.device) / 2**20,
                  "reservedMiB": torch.cuda.memory_reserved(self.device) / 2**20}

@@ -18,7 +18,8 @@ from PIL import Image
 namespace = {"threading": threading, "time": time, "torch": torch, "Image": Image, "graph_env_enabled": lambda: True, "fixed_prompt_graph_enabled": lambda: False}
 methods = [n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name in names]
 exec(compile(ast.Module(body=methods, type_ignores=[]), str(source), "exec"), namespace)
-Control = type("Control", (), {n: namespace[n] for n in names})
+Control = type("Control", (), {**{n: namespace[n] for n in names},
+                                 "_decay_sink": lambda self, store, chunk_idx: {"enabled": False}})  # covered in test_cache_decay
 
 
 def control():

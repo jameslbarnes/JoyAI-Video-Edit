@@ -642,6 +642,8 @@ def create_app(args: argparse.Namespace) -> FastAPI:
         app.state.upscaler = OutputUpscale(os.environ["JOYAI_UPSCALE_DEVICE"])
     from xvideo.serving.shader_strength import ShaderStrength
     app.state.shader_strength = ShaderStrength()
+    from xvideo.serving.cache_decay import CacheDecay
+    app.state.cache_decay = CacheDecay()
     app.state.ws_debug = {}
     app.state.shader_bridges = {}
 
@@ -749,6 +751,21 @@ def create_app(args: argparse.Namespace) -> FastAPI:
             state = app.state.shader_strength.set(payload.get('value'), mode=payload.get('mode'))
             return JSONResponse({'ok': True, 'strength': state, 'status': 'queued'})
         except ValueError as exc:
+            return JSONResponse({'ok': False, 'error': str(exc)}, status_code=400)
+
+    @app.get("/cache-decay")
+    def cache_decay_status() -> JSONResponse:
+        return JSONResponse({'ok': True, 'decay': app.state.cache_decay.snapshot(),
+                             'active': app.state.active_session is not None})
+
+    @app.post("/cache-decay")
+    def cache_decay_set(payload: dict) -> JSONResponse:
+        # Applies from the next chunk of the current and future sessions; not persisted.
+        try:
+            state = app.state.cache_decay.set(payload.get('half_life_s'), mode=payload.get('mode'),
+                                              every_chunks=payload.get('every_chunks'))
+            return JSONResponse({'ok': True, 'decay': state})
+        except (TypeError, ValueError) as exc:
             return JSONResponse({'ok': False, 'error': str(exc)}, status_code=400)
 
     @app.post("/load")
@@ -1275,6 +1292,7 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                 ref_image=ref_image,
             )
             created.shader_strength = app.state.shader_strength
+            created.cache_decay = app.state.cache_decay
             return created
 
         def _session_health_error(session_ref) -> str | None:

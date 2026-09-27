@@ -56,6 +56,9 @@ args = build_parser().parse_args([
 app = create_app(args)
 from xvideo.serving.shader_strength import ShaderStrength, load_strength_config
 app.state.shader_strength = ShaderStrength(**load_strength_config(ROOT / 'tulip/shader-strength.json'))
+from xvideo.serving.cache_decay import CacheDecay, load_decay_config
+app.state.cache_decay = CacheDecay(**load_decay_config(ROOT / 'tulip/cache-decay.json'),
+                                   native_fps=native_quality['fps'])
 
 @app.get('/native-config')
 def native_config():
