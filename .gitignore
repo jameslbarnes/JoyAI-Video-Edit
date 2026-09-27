@@ -28,3 +28,29 @@ deploy/hf_space/
 
 # Read-only pinned SR research source; see tulip/UPSCALING_TRIAL.md.
 tulip/research/Real-ESRGAN/
+
+# Machine-local launch preferences, read on each SDK/supervisor restart.
+tulip/runtime-settings.json
+tulip/performance-settings.json
+
+# Isolated vendor VFX package used for local benchmarks.
+tulip/research/vfx-probe/
+
+# Local restore points include private prompts and machine settings.
+tulip/favorites/
+
+# Vendored third-party research packages and nested checkouts (large, own repos/licenses).
+tulip/research/visual-enhancer-v11/
+tulip/research/dlssg-python/
+tulip/research/video2dlssnr/
+
+# Local source restore snapshots and atomic-write/backup leftovers.
+tulip/*-backup-*/
+tulip/resident-restore-*/
+tulip/*.tmp
+tulip/*.bak
+
+# Encoded video test captures (large binaries; evidence lives outside git).
+tulip/*.flv
+tulip/*.h264
+tulip/*.mp4
