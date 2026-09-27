@@ -1,0 +1,2 @@
+# Optional GPU-resident mobile output. Installed without changing model dependencies.
+PyNvVideoCodec==2.2.3

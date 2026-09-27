@@ -1,0 +1,16 @@
+{
+  "height": 1080,
+  "direct_ndi": true,
+  "progressive": true,
+  "gpu_video": {
+    "enabled": true,
+    "height": 2160,
+    "bitrate": 15000000,
+    "url": "rtmp://127.0.0.1:1935/joyai-gpu",
+    "ffmpeg": "C:/Users/Admin/src/easel/external/ffmpeg-master-latest-win64-gpl-shared/bin/ffmpeg.exe"
+  },
+  "denoise": 0.25,
+  "backend": "vsr_ultra",
+  "preload_vsr": true,
+  "rife_gpu": true
+}

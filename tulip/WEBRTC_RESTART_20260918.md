@@ -1,0 +1,31 @@
+# WebRTC publisher restart after overlapping scenes
+
+The six-minute pacing acceptance in `ROBUST_PLAYBACK_20260918.md` did not cover overlapping scene requests. The user subsequently reported a freeze and reconnect. Inspection found the original inference process and WebSocket still alive, but the GPU mux process had been recreated at approximately 00:28:42 local time. Publisher state also contained 24 underrun episodes since the preceding deployment. Existing mux logs lacked timestamps/lifecycle reasons, so they cannot establish every historical stall's cause.
+
+## Reproduced defects and correction
+
+`DirectNdiPublisher.begin_transition()` reused a previous transition when it had not yet begun its final fade. If that transition already had `reset=True`, the preceding scene's arriving frames could finish it while the next prompt was being prepared. `close_presentation(preserve=True)` then saw `reset_scene()` return false and closed the publisher. The next output reopened NVENC/FFmpeg and the WebRTC source disconnected. A deterministic test reproduced this in both moving-shader and static-morph modes before the fix.
+
+Every preparation now initializes fresh transition state with `reset=False`, so frames cannot complete its handoff until that preparation's own reset. A second client defect sent an unprepared start when a scene request arrived before the current scene's first output. On capable runtimes the control queue now waits for initialization, coalesces pending requests, and uses a prepared handoff. Legacy runtimes retain their existing fallback.
+
+GPU status now exposes `restart_count` and a bounded timestamped `transport_events` history with mux/pacer identities and release state. This supplements FPS, drops and underrun counters; recovered playback alone is not acceptance.
+
+## Validation
+
+36 Python tests and 40 JoyAI client Jest tests pass. The new transition regression failed both modes before the fix and passes afterward. The client test covers a request before readiness, continued waiting before first output, coalescing, and a prepared start once initialized.
+
+Deployment `deployment-003623` uses the SDK lifecycle, preserving the current prompt and strength. Live acceptance uses `joyai-rapid-scenes.cjs` plus a concurrent WebRTC receiver. The probe requests three pairs of same-content cuts at 0/1000/2000 ms after the preceding start acknowledgement and widens preparation by 650 ms to expose the handoff race. Results are recorded below after completion.
+
+The first live probe (`rapid-scene-validation.json`) aborted after a model WebSocket disconnect; the later client message was a session-start timeout and the first error was not retained. The tile was restored using the warm SDK session lifecycle. The client now preserves its first terminal error (timestamp/message/stack) until a new start, and the probe records failures and control acknowledgements directly. This interrupted run is not an acceptance pass.
+
+The next probe (`rapid-scene-diagnostic2.json`) completed all six cuts with one mux PID and zero restarts, but failed cadence acceptance with 162 underrun episodes and gaps up to 117.4 ms. Its extended transitions exposed drift in the shader producer: exact-rate production discarded scheduling misses while the isolated consumer continued to drain. Transition production now uses fractional deadlines and samples at 32 fps while the pacer reserve is below eight frames, returning to 24 once replenished. The bounded queue and 24-fps delivery clock are unchanged. Deployment `deployment-004551` includes this correction; final results follow after validation.
+
+Both repeats after that deployment (`rapid-scene-fixed1.json`, `rapid-scene-fixed2.json`) completed all six requested cuts: 12 cuts total, including requests with zero received frames and one received frame while still transitioning. Every sample retained mux PID 54876. Both runs reported zero restarts, zero underruns, zero publisher drops/errors, and zero sender intervals above the 62.5-ms gap threshold. No competing request invalidated either run. The client first-error field remained null. The test deliberately adds 650 ms preparation delay; its transition timing is not a normal scene-latency benchmark.
+
+The concurrent four-minute receiver (`rapid-scene-fixed-receiver.jsonl`) decoded 5761 frames with zero decoder drops or packet loss and one uninterrupted WebRTC connection. It nevertheless recorded one 302-ms freeze at approximately 04:53:22 UTC, after the scripted cuts. The largest video callback interval was 266.3 ms. The publisher still had zero underruns/gaps/restarts. This is not a clean end-to-end smoothness pass: the demonstrated reconnect defects are fixed, but a separate downstream stall remains unlocalized.
+
+The 57.414-second follow-up (`rapid-scene-fixed-steady.json`) includes an independent creative scene change (epochs 14 to 15), so its generated/canvas counter averages are not a pure steady-state benchmark. GPU delivery was 24.019 fps with zero drops, underruns or sender gaps. Median capture-to-canvas latency was 1621 ms. Newer creative prompt/strength changes were preserved rather than restoring the deployment snapshot over them.
+
+Read-only paired diagnosis uses `tulip/rtmp_delivery_probe.cjs` to timestamp compressed frame delivery after MediaMTX while an enhanced WHEP probe records decode time and jitter-buffer delays. No relay settings, bitrate or resolution were changed speculatively.
+
+The three-minute paired run (`relay-delivery-diagnostic.jsonl`, `receiver-stall-diagnostic.jsonl`) did not reproduce the downstream freeze. The RTMP probe received 4306 compressed frames, largest arrival gap 63.3 ms; its owned FFmpeg child was stopped at the time bound. The browser decoded 4315 frames with zero freezes/drops and largest callback gap 83.4 ms. Publisher identity stayed unchanged with zero underruns/gaps. These different startup/count windows should not be compared as frame loss. The earlier isolated receiver freeze remains unresolved; the user was asked which viewer showed the reported freeze/restart so the affected receive path can be investigated. Current live resolution and 12-native/2x-interpolation/24-output configuration are unchanged.

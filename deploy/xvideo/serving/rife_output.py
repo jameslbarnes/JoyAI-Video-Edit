@@ -1,4 +1,4 @@
-"""Optional 2x presentation-only RIFE; never feeds interpolated pixels to KV/VAE.
+"""Optional 2x/4x presentation-only RIFE; never feeds interpolated pixels to KV/VAE.
 
 Loads the user's existing FluxRT implementation/checkpoint read-only. Original
 JPEGs are passed unchanged; only midpoint JPEGs are encoded. State is per session.
@@ -48,7 +48,13 @@ class RifeOutput:
         return chain[1:-1]
 
     @torch.inference_mode()
-    def process(self, frames, metas, profile, quality=95, *, raw_output=False, transition_source=None):
+    def process(self, frames, metas, profile, quality=95, *, raw_output=False, transition_source=None, multiplier=2, gpu_output=False):
+        if multiplier not in (2, 4):
+            raise ValueError('RIFE multiplier must be 2 or 4')
+        if gpu_output and not raw_output:
+            raise ValueError('GPU RIFE output requires raw_output=True')
+        if gpu_output:
+            from .gpu_video_output import GpuFrame
         start = time.perf_counter()
         output, correspondence = [], []
         with torch.cuda.device(self.device):
@@ -58,7 +64,9 @@ class RifeOutput:
                 raise ValueError("RIFE accepts at most one matched eight-frame chunk")
             arrays = np.stack([np.asarray(Image.open(io.BytesIO(j)).convert("RGB"))
                                if isinstance(j, bytes) else j for j in frames])
-            batch = torch.from_numpy(arrays).permute(0, 3, 1, 2).to(self.device, torch.float16) / 255
+            native_batch = torch.from_numpy(arrays).to(self.device) if gpu_output else None
+            source_batch = native_batch if gpu_output else torch.from_numpy(arrays)
+            batch = source_batch.permute(0, 3, 1, 2).to(self.device, torch.float16) / 255
             h, w = batch.shape[-2:]
             batch = F.pad(batch, (0, (-w) % 32, 0, (-h) % 32), mode="replicate")
             bridge_pending = self.transition_pending
@@ -74,9 +82,12 @@ class RifeOutput:
                 bridge = torch.from_numpy(source_array).permute(2, 0, 1).unsqueeze(0).to(self.device, torch.float16) / 255
                 bridge = F.pad(bridge, (0, (-w) % 32, 0, (-h) % 32), mode="replicate")
                 morph = self._morph(bridge, batch[:1])[:, :, :h, :w]
-                morph = morph.clamp(0, 1).mul(255).byte().permute(0, 2, 3, 1).cpu().numpy()
+                morph = morph.clamp(0, 1).mul(255).byte().permute(0, 2, 3, 1)
+                morph = morph.contiguous() if gpu_output else morph.cpu().numpy()
                 for i, pixels in enumerate(morph):
-                    if raw_output:
+                    if gpu_output:
+                        output.append(GpuFrame.record(pixels))
+                    elif raw_output:
                         output.append(pixels)
                     else:
                         buffer = io.BytesIO()
@@ -91,24 +102,40 @@ class RifeOutput:
             pixels = None
             if len(chain) > 1:
                 middle = self.model(torch.cat([chain[:-1], chain[1:]], dim=1))
-                pixels = middle[:, :, :h, :w].clamp(0, 1).mul(255).byte().permute(0, 2, 3, 1).cpu().numpy()
+                if multiplier == 4:
+                    # Recursively produce quarter and three-quarter samples.
+                    # Evaluate the two sets separately to bound peak memory.
+                    quarter = self.model(torch.cat([chain[:-1], middle], dim=1))
+                    three_quarter = self.model(torch.cat([middle, chain[1:]], dim=1))
+                    middle = torch.stack([quarter, middle, three_quarter], dim=1).flatten(0, 1)
+                pixels = middle[:, :, :h, :w].clamp(0, 1).mul(255).byte().permute(0, 2, 3, 1)
+                pixels = pixels.contiguous() if gpu_output else pixels.cpu().numpy()
             for i, (jpeg, meta) in enumerate(zip(frames, metas)):
                 if has_previous or i > 0:
-                    midpoint = pixels[i if has_previous else i-1]
-                    if raw_output:
-                        output.append(midpoint)
-                    else:
-                        buffer = io.BytesIO()
-                        Image.fromarray(midpoint).save(buffer, format="JPEG", quality=quality)
-                        output.append(buffer.getvalue())
-                    correspondence.append({**meta, "interpolated": True,
-                        "source_seq_previous": (metas[i-1] if i else self.previous_meta).get("seq"), "interpolation_t": 0.5})
-                output.append(arrays[i] if raw_output else jpeg)
+                    interval = i if has_previous else i-1
+                    for k in range(multiplier-1):
+                        midpoint = pixels[interval*(multiplier-1)+k]
+                        if gpu_output:
+                            output.append(GpuFrame.record(midpoint))
+                        elif raw_output:
+                            output.append(midpoint)
+                        else:
+                            buffer = io.BytesIO()
+                            Image.fromarray(midpoint).save(buffer, format="JPEG", quality=quality)
+                            output.append(buffer.getvalue())
+                        correspondence.append({**meta, "interpolated": True,
+                            "source_seq_previous": (metas[i-1] if i else self.previous_meta).get("seq"),
+                            "interpolation_t": (k+1)/multiplier})
+                output.append(GpuFrame.record(native_batch[i]) if gpu_output else (arrays[i] if raw_output else jpeg))
                 correspondence.append({**meta, "interpolated": False})
             self.previous, self.previous_meta = batch[-1:].clone(), metas[-1]
         # Midpoint .cpu() above synchronizes our work, not every JoyAI stream.
         profile["rife_s"] = time.perf_counter() - start
+        if gpu_output:
+            profile["rife_timing"] = 'submission; completion tracked by output events'
+        profile["rife_device"] = str(self.device)
+        profile["rife_gpu_output"] = bool(gpu_output)
         profile["generated_count"] = len(frames)
         profile["display_count"] = len(output)
-        profile["rife_multiplier"] = 2
+        profile["rife_multiplier"] = multiplier
         return output, correspondence
