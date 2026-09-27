@@ -135,7 +135,10 @@ class Fp8Linear(nn.Module):
             b = lin.bias.data.to(dtype=out_dtype)
         return cls(w_q, w_s, b, out_dtype=out_dtype)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, *, active_rows=None) -> torch.Tensor:
+        if active_rows is not None and _FAST_ACCUM:
+            from xvideo.models.dit.fp8_prefix import prefix_linear
+            return prefix_linear(self, x, active_rows)
         orig_shape = x.shape
         x_2d = x.reshape(-1, orig_shape[-1]).contiguous()
         M, K = x_2d.shape

@@ -7,6 +7,7 @@ from typing import Any, Callable, Optional
 import torch
 
 from xvideo.models.dit.rope import apply_rotary_emb
+from xvideo.models.dit.prefix_attention import prepare_prefix_mask, set_prefix_length, protected_text_rows
 
 GRAPH_ENV = "JOYOMNI_CUDA_GRAPH"
 
@@ -17,6 +18,24 @@ GRAPH_WINDOW_CHUNKS = 3
 
 def graph_env_enabled() -> bool:
     return os.environ.get(GRAPH_ENV, "1").lower() in {"1", "true", "yes", "on"}
+
+
+def fixed_prompt_graph_enabled() -> bool:
+    return os.environ.get("JOYOMNI_FIXED_PROMPT_GRAPH", "1").lower() in {"1", "true", "yes", "on"}
+
+
+def prompt_graph_capacity(length: int, limit: int) -> int:
+    """Reuse normal prompts in a 512-token bucket; grow without truncation."""
+    if not 0 < length <= limit:
+        raise ValueError("Prompt embeddings exceed the graph prompt capacity")
+    if os.environ.get('JOYAI_SINGLE_PROMPT_GRAPH', '0') == '1':
+        return limit
+    bucket = 512 if os.environ.get('JOYAI_COMPACT_PROMPT_GRAPHS', '0') == '1' else 128
+    return min(limit, max(512, ((length + bucket - 1) // bucket) * bucket))
+
+
+def prompt_graph_capacities(limit: int) -> tuple[int, ...]:
+    return tuple(sorted({prompt_graph_capacity(n, limit) for n in range(1, limit + 1)}))
 
 
 class StreamingGraphRunner:
@@ -33,6 +52,8 @@ class StreamingGraphRunner:
         device: torch.device,
         dtype: torch.dtype,
         autocast_ctx: Callable[[], Any],
+        mask_prompt: bool = False,
+        shared_kv: Optional[StreamingGraphRunner] = None,
     ):
         self.transformer = transformer
         self.device = device
@@ -45,6 +66,8 @@ class StreamingGraphRunner:
         self.chunk_tokens = chunk_tokens
         self.ref_tokens = int(ref_tokens)
         self.txt_len = int(txt_len)
+        self.mask_prompt = mask_prompt
+        self.prompt_tokens = 0
         self.max_temporal_ids = int(max_temporal_ids)
         self.sink_off = 0
         self.prev1_off = chunk_tokens
@@ -52,13 +75,23 @@ class StreamingGraphRunner:
         self.pool_len = 2 * chunk_tokens + self.ref_tokens
 
         L = self.num_layers
-        self.pool_k = torch.zeros(L, 1, self.pool_len, heads, head_dim, device=device, dtype=dtype)
-        self.pool_v = torch.zeros_like(self.pool_k)
-        self.stage_k = torch.zeros(L, 1, chunk_tokens, heads, head_dim, device=device, dtype=dtype)
-        self.stage_v = torch.zeros_like(self.stage_k)
-        self.pub_k = torch.zeros(2, L, 1, chunk_tokens, heads, head_dim, device=device, dtype=dtype)
-        self.pub_v = torch.zeros_like(self.pub_k)
-        self._pub_parity = 0
+        if shared_kv is None:
+            self.pool_k = torch.zeros(L, 1, self.pool_len, heads, head_dim, device=device, dtype=dtype)
+            self.pool_v = torch.zeros_like(self.pool_k)
+            self.stage_k = torch.zeros(L, 1, chunk_tokens, heads, head_dim, device=device, dtype=dtype)
+            self.stage_v = torch.zeros_like(self.stage_k)
+            self.pub_k = torch.zeros(2, L, 1, chunk_tokens, heads, head_dim, device=device, dtype=dtype)
+            self.pub_v = torch.zeros_like(self.pub_k)
+            self._publication_state = [0]
+        else:
+            if (shared_kv.pool_k.shape != (L, 1, self.pool_len, heads, head_dim)
+                    or shared_kv.chunk_tokens != chunk_tokens
+                    or shared_kv.device != device or shared_kv.dtype != dtype):
+                raise ValueError('Graph family KV geometry/device mismatch')
+            for name in ('pool_k','pool_v','stage_k','stage_v','pub_k','pub_v','_publication_state'):
+                setattr(self, name, getattr(shared_kv, name))
+        # Captures have independent private allocation pools. Only explicit KV
+        # buffers are shared, under dit_lock, so any bucket replay order is safe.
 
         cos, sin = pos_freqs
         ct = chunk_tokens
@@ -76,6 +109,15 @@ class StreamingGraphRunner:
         self.in_store_timestep = torch.zeros((latent_shape[0],), device=device, dtype=dtype)
         self.in_prompt = torch.zeros((1, self.txt_len, int(transformer.config.text_states_dim)),
                                      device=device, dtype=dtype)
+        # K layout: cached sink/previous/reference, current image and input, text.
+        self.prompt_key_prefix = self.pool_len + 2 * chunk_tokens
+        self.prompt_key_mask = (torch.ones((1, 1, 1, self.prompt_key_prefix + self.txt_len),
+                                          device=device, dtype=torch.bool) if mask_prompt else None)
+        if (mask_prompt and device.type == 'cuda' and head_dim in (64, 128)
+                and os.environ.get('JOYOMNI_SAGE_ATTN', '0').lower() in {'1','true','yes','on'}
+                and os.environ.get('JOYOMNI_PROMPT_ATTENTION', 'sage-prefix') == 'sage-prefix'):
+            prepare_prefix_mask(self.prompt_key_mask, 2 * chunk_tokens + self.txt_len,
+                                text_capacity=(self.txt_len if os.environ.get('JOYOMNI_TRIM_PADDED_TEXT','0') == '1' else None))
         self.in_current_ids = torch.full((1, latent_shape[2]), self.max_temporal_ids,
                                          device=device, dtype=torch.long)
 
@@ -108,6 +150,7 @@ class StreamingGraphRunner:
                         timestep=self.in_timestep,
                         encoder_hidden_states=self.in_prompt,
                         ref_video_latent=self.in_ref_latent,
+                        attention_mask=self.prompt_key_mask,
                         current_temporal_ids=self.in_current_ids,
                         cached_temporal_ids=None,
                         kv_cache_mode="reuse",
@@ -167,7 +210,10 @@ class StreamingGraphRunner:
             run_full()
             torch.cuda.synchronize(self.device)
             g = torch.cuda.CUDAGraph()
-            with torch.cuda.graph(g, pool=mem_pool, capture_error_mode="thread_local"):
+            # PyTorch's default capture stream is process-global: SR may have
+            # initialized it on the output GPU before this model-GPU capture.
+            capture_stream = torch.cuda.Stream(device=self.device)
+            with torch.cuda.graph(g, pool=mem_pool, stream=capture_stream, capture_error_mode="thread_local"):
                 self.out_latents = run_full()
             self.full_graph = g
         finally:
@@ -183,7 +229,25 @@ class StreamingGraphRunner:
               f"ref_tokens={self.ref_tokens}, mti={self.max_temporal_ids})", flush=True)
 
     def bind_session(self, token: int, prompt_embeds: torch.Tensor) -> None:
-        self.in_prompt.copy_(prompt_embeds.to(dtype=self.dtype))
+        if prompt_embeds.ndim != 3:
+            raise ValueError("Prompt embeddings must be batch x tokens x features")
+        length = int(prompt_embeds.shape[1])
+        if (prompt_embeds.shape[0] != 1 or
+                prompt_embeds.shape[2] != self.in_prompt.shape[2] or
+                not 0 < length <= self.txt_len or (not self.mask_prompt and length != self.txt_len)):
+            raise ValueError("Prompt embeddings do not fit the captured graph capacity")
+        if self.mask_prompt:
+            self.in_prompt.zero_()
+            self.in_prompt[:, :length].copy_(prompt_embeds.to(dtype=self.dtype))
+            self.prompt_key_mask.fill_(False)
+            self.prompt_key_mask[..., :self.prompt_key_prefix + length].fill_(True)
+            set_prefix_length(self.prompt_key_mask, self.prompt_key_prefix + length)
+        else:
+            self.in_prompt.copy_(prompt_embeds.to(dtype=self.dtype))
+        self.prompt_tokens = length
+        # Host-side diagnostic only; never read a CUDA scalar back to the CPU.
+        self.active_text_rows = (protected_text_rows(2 * self.chunk_tokens, length, self.txt_len)
+                                 if hasattr(self.prompt_key_mask, '_fp8_text_rows') else self.txt_len)
         self.bound_token = token
         self.pool_dirty = True
         self.last_graph_chunk = -(10 ** 9)
@@ -234,8 +298,8 @@ class StreamingGraphRunner:
         self.pool_dirty = False
 
     def publish_to_cache(self, scope_store: dict, mem_id: int) -> None:
-        p = self._pub_parity
-        self._pub_parity ^= 1
+        p = self._publication_state[0]
+        self._publication_state[0] ^= 1
         self.pub_k[p].copy_(self.stage_k)
         self.pub_v[p].copy_(self.stage_v)
         chunk_store = {}

@@ -1,0 +1,27 @@
+[
+  {
+    "tokens": 3,
+    "relativeL2": 0.0,
+    "maxAbsError": 0.0
+  },
+  {
+    "tokens": 16,
+    "relativeL2": 0.0,
+    "maxAbsError": 0.0
+  },
+  {
+    "tokens": 1,
+    "relativeL2": 0.0,
+    "maxAbsError": 0.0
+  },
+  {
+    "tokens": 11,
+    "relativeL2": 0.0,
+    "maxAbsError": 0.0
+  },
+  {
+    "tokens": 4,
+    "relativeL2": 0.0,
+    "maxAbsError": 0.0
+  }
+]

@@ -348,6 +348,39 @@ class Pipeline(DiffusionPipeline):
         return windows
 
     @staticmethod
+    def _get_last_chunk_window(
+        total_latent_frames: int,
+        chunk_size: int,
+        window_size: int,
+        global_sink_chunk: bool,
+    ) -> Dict[str, Any]:
+        """Select the current streaming window without enumerating session history.
+
+        This is equivalent to ``_get_chunk_windows(...)[-1]`` for nonempty
+        input, but its work and allocations are bounded by the window size.
+        """
+        if window_size <= 0:
+            raise ValueError(f"`window_size` must be positive, got {window_size}.")
+        if chunk_size <= 0 or total_latent_frames <= 0:
+            raise ValueError("`chunk_size` and `total_latent_frames` must be positive.")
+
+        chunk_idx = (total_latent_frames - 1) // chunk_size
+        chunk_start = chunk_idx * chunk_size
+        if global_sink_chunk and chunk_idx > 0:
+            tail_window_size = max(window_size - 1, 1)
+            tail_chunk_start = max(1, chunk_idx - tail_window_size + 1)
+            selected_chunk_ids = [0] + list(range(tail_chunk_start, chunk_idx + 1))
+        else:
+            window_chunk_start = max(0, chunk_idx - window_size + 1)
+            selected_chunk_ids = list(range(window_chunk_start, chunk_idx + 1))
+        return {
+            "chunk_idx": chunk_idx,
+            "chunk_start": chunk_start,
+            "chunk_end": total_latent_frames,
+            "selected_chunk_ids": selected_chunk_ids,
+        }
+
+    @staticmethod
     def _chunk_frame_bounds(chunk_id: int, chunk_size: int, total_latent_frames: int) -> Tuple[int, int]:
         chunk_start = chunk_id * chunk_size
         chunk_end = min(total_latent_frames, chunk_start + chunk_size)

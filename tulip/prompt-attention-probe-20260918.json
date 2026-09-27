@@ -1,0 +1,71 @@
+[
+  {
+    "capacity": 512,
+    "backend": "cudnn",
+    "graphMs": 1.1859193420410157,
+    "relativeL2": 0.001145856105722487
+  },
+  {
+    "capacity": 512,
+    "backend": "sage-masked-triton",
+    "graphMs": 1.0842211151123047,
+    "relativeL2": 0.013581094332039356
+  },
+  {
+    "capacity": 512,
+    "backend": "sage-prefix",
+    "graphMs": 0.5553177642822266,
+    "relativeL2": 0.013631023466587067
+  },
+  {
+    "capacity": 512,
+    "backend": "sage-unmasked",
+    "graphMs": 0.4816640090942383
+  },
+  {
+    "capacity": 640,
+    "backend": "cudnn",
+    "graphMs": 1.5832928466796874,
+    "relativeL2": 0.0011415149783715606
+  },
+  {
+    "capacity": 640,
+    "backend": "sage-masked-triton",
+    "graphMs": 1.0528630065917968,
+    "relativeL2": 0.01363359671086073
+  },
+  {
+    "capacity": 640,
+    "backend": "sage-prefix",
+    "graphMs": 0.662840347290039,
+    "relativeL2": 0.013481170870363712
+  },
+  {
+    "capacity": 640,
+    "backend": "sage-unmasked",
+    "graphMs": 0.45304542541503906
+  },
+  {
+    "capacity": 1024,
+    "backend": "cudnn",
+    "graphMs": 1.188271026611328,
+    "relativeL2": 0.0011410227743908763
+  },
+  {
+    "capacity": 1024,
+    "backend": "sage-masked-triton",
+    "graphMs": 1.268769302368164,
+    "relativeL2": 0.013644491322338581
+  },
+  {
+    "capacity": 1024,
+    "backend": "sage-prefix",
+    "graphMs": 1.1402438354492188,
+    "relativeL2": 0.013540990650653839
+  },
+  {
+    "capacity": 1024,
+    "backend": "sage-unmasked",
+    "graphMs": 0.5613065719604492
+  }
+]

@@ -1,0 +1,122 @@
+{
+  "attention": [
+    {
+      "validKeys": 513,
+      "relativeL2": 0.013418099842965603
+    },
+    {
+      "validKeys": 65,
+      "relativeL2": 0.013531619682908058
+    },
+    {
+      "validKeys": 1,
+      "relativeL2": 0.0
+    },
+    {
+      "validKeys": 511,
+      "relativeL2": 0.013213076628744602
+    },
+    {
+      "validKeys": 129,
+      "relativeL2": 0.013108941726386547
+    }
+  ],
+  "transformer": [
+    {
+      "tokens": 3,
+      "relativeL2": 0.007048406638205051
+    },
+    {
+      "tokens": 512,
+      "relativeL2": 0.0043373568914830685
+    },
+    {
+      "tokens": 1,
+      "relativeL2": 0.006761888507753611
+    },
+    {
+      "tokens": 475,
+      "relativeL2": 0.004707106854766607
+    },
+    {
+      "tokens": 64,
+      "relativeL2": 0.006484113167971373
+    }
+  ],
+  "streamingRunnerReused": true,
+  "fp8": true,
+  "familySwitches": [
+    {
+      "tokens": 475,
+      "capacity": 512,
+      "relativeL2": 0.0
+    },
+    {
+      "tokens": 1024,
+      "capacity": 1024,
+      "relativeL2": 0.0
+    },
+    {
+      "tokens": 1,
+      "capacity": 512,
+      "relativeL2": 0.0
+    },
+    {
+      "tokens": 700,
+      "capacity": 768,
+      "relativeL2": 0.0
+    },
+    {
+      "tokens": 513,
+      "capacity": 640,
+      "relativeL2": 0.0
+    },
+    {
+      "tokens": 900,
+      "capacity": 1024,
+      "relativeL2": 0.0
+    },
+    {
+      "tokens": 477,
+      "capacity": 512,
+      "relativeL2": 0.0
+    },
+    {
+      "tokens": 640,
+      "capacity": 640,
+      "relativeL2": 0.0
+    },
+    {
+      "tokens": 641,
+      "capacity": 768,
+      "relativeL2": 0.0
+    },
+    {
+      "tokens": 896,
+      "capacity": 896,
+      "relativeL2": 0.0
+    },
+    {
+      "tokens": 897,
+      "capacity": 1024,
+      "relativeL2": 0.0
+    },
+    {
+      "tokens": 512,
+      "capacity": 512,
+      "relativeL2": 0.0
+    },
+    {
+      "tokens": 1024,
+      "capacity": 1024,
+      "relativeL2": 0.0
+    },
+    {
+      "tokens": 475,
+      "capacity": 512,
+      "relativeL2": 0.0
+    }
+  ],
+  "independentGraphPools": true,
+  "sharedKvAndGlobalPublicationParity": true
+}

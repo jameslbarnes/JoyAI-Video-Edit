@@ -1,0 +1,25 @@
+[
+  {
+    "backend": "sage",
+    "graphMs": 0.263481593132019,
+    "finite": true
+  },
+  {
+    "backend": "CUDNN_ATTENTION",
+    "graphMs": 0.48751201629638674,
+    "finite": true,
+    "maxAbsError": 0.0009765625,
+    "relativeL2": 0.0012418633559718728
+  },
+  {
+    "backend": "EFFICIENT_ATTENTION",
+    "graphMs": 1.4759632110595704,
+    "finite": true,
+    "maxAbsError": 0.0,
+    "relativeL2": 0.0
+  },
+  {
+    "backend": "FLASH_ATTENTION",
+    "error": "No available kernel. Aborting execution."
+  }
+]

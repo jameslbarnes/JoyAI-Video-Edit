@@ -107,6 +107,7 @@ def _fp8_stream_enabled(block, stream: str) -> bool:
 from xvideo.models.dit import sgl_fused_ops as _sgl_fused
 
 from xvideo.models.dit.rope import apply_rotary_emb, get_1d_rotary_pos_embed
+from xvideo.models.dit.prompt_mask import masked_attention
 
 
 class ModulateWan(nn.Module):
@@ -159,8 +160,10 @@ def _sdpa_attention(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor)
     return out.transpose(1, 2)
 
 
-def _flash_attention4(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor) -> torch.Tensor:
+def _flash_attention4(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, attn_mask=None) -> torch.Tensor:
     global _FA4_DISABLED
+    if attn_mask is not None:
+        return masked_attention(query, key, value, attn_mask)
     original_dtype = query.dtype
     if query.dtype not in (torch.float16, torch.bfloat16):
         query = query.to(torch.bfloat16)
@@ -324,12 +327,14 @@ class MMDoubleStreamBlock(nn.Module):
         skip_text_stream: bool = False,
         kv_cache_pre_rope: bool = False,
         cached_freqs_cis: Optional[tuple] = None,
+        attention_mask: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         _maybe_install_fp8_stream(self, "img")
         _fp8_on = _fp8_stream_enabled(self, "img")
         if not skip_text_stream:
             _maybe_install_fp8_stream(self, "txt")
         _fp8_txt_on = (not skip_text_stream) and _fp8_stream_enabled(self, "txt")
+        _fp8_txt_rows = getattr(attention_mask, '_fp8_text_rows', None) if _fp8_txt_on else None
         (
             img_mod1_shift,
             img_mod1_scale,
@@ -378,7 +383,7 @@ class MMDoubleStreamBlock(nn.Module):
                 bias=self.txt_norm1.bias if self.txt_norm1.elementwise_affine else None,
                 eps=self.txt_norm1.eps,
             )
-            txt_qkv = self._fp8_txt_attn_qkv(txt_modulated) if _fp8_txt_on else self.txt_attn_qkv(txt_modulated)
+            txt_qkv = self._fp8_txt_attn_qkv(txt_modulated, active_rows=_fp8_txt_rows) if _fp8_txt_on else self.txt_attn_qkv(txt_modulated)
             _tv = txt_qkv.view(txt_qkv.shape[0], txt_qkv.shape[1], 3, self.heads_num, -1)
             txt_q, txt_k, txt_v = _tv[:, :, 0], _tv[:, :, 1], _tv[:, :, 2]
             txt_q = self.txt_attn_q_norm(txt_q).to(txt_v.dtype)
@@ -417,7 +422,7 @@ class MMDoubleStreamBlock(nn.Module):
             k = torch.cat([cached_key, k], dim=1)
             v = torch.cat([cached_value, v], dim=1)
 
-        attn = _flash_attention4(q, k, v)
+        attn = _flash_attention4(q, k, v, attn_mask=attention_mask)
         attn = attn.flatten(2, 3)
         if skip_text_stream:
             img_attn = attn
@@ -435,13 +440,13 @@ class MMDoubleStreamBlock(nn.Module):
             return self.img_mlp(x)
 
         def _txt_proj_call(x):
-            return self._fp8_txt_attn_proj(x) if _fp8_txt_on else self.txt_attn_proj(x)
+            return self._fp8_txt_attn_proj(x, active_rows=_fp8_txt_rows) if _fp8_txt_on else self.txt_attn_proj(x)
 
         def _txt_mlp_call(x):
             if _fp8_txt_on:
-                h = self._fp8_txt_mlp_up(x)
+                h = self._fp8_txt_mlp_up(x, active_rows=_fp8_txt_rows)
                 h = self._txt_mlp_act(h)
-                return self._fp8_txt_mlp_down(h)
+                return self._fp8_txt_mlp_down(h, active_rows=_fp8_txt_rows)
             return self.txt_mlp(x)
 
         def _txt_tail(txt_in):
@@ -850,6 +855,7 @@ class Transformer3DModel(ModelMixin, ConfigMixin, PeftAdapterMixin):
         kv_cache_pre_rope: bool = False,
         self_attn_input_mode: Optional[str] = None,
         skip_text_stream: bool = False,
+        attention_mask: Optional[torch.Tensor] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
 
         self._ensure_kv_cache_state()
@@ -991,6 +997,7 @@ class Transformer3DModel(ModelMixin, ConfigMixin, PeftAdapterMixin):
                 skip_text_stream=skip_text_stream,
                 kv_cache_pre_rope=kv_cache_pre_rope,
                 cached_freqs_cis=cached_freqs_cis,
+                attention_mask=attention_mask,
             )
 
         img = self.proj_out(self.norm_out(img))

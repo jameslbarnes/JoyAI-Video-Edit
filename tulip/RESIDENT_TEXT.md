@@ -1,5 +1,46 @@
 # Resident BF16 prompt encoder — Tulip, 2026-09-12
 
+## Persistent launcher setting ? 2026-09-14
+
+The launcher now reads `tulip/runtime-settings.json` on every start. This local,
+gitignored file contains `{"residentText": true}` on Tulip. Normal SDK/backend
+supervisor starts therefore retain full BF16 GPU residency without adding a
+special command-line flag or restarting the backend. An explicitly supplied
+`-ResidentText` switch (including `-ResidentText:$false`) takes precedence.
+Missing settings default to offload; invalid boolean values fail with an error.
+Separate-GPU and 20 GiB free-memory preflights remain enforced.
+
+The SDK's existing `primaryModel.keepResident=false` and
+`preserveVideoRuntime=false` keep Photo/Video model lifetimes exclusive.
+For rollback, set `residentText` to false and restart JoyAI through the SDK.
+Keep the other model unloaded until the encoder has returned to offload.
+
+Validation: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+ tulip/test-runtime-settings.ps1` checks launcher syntax, missing-file default,
+true/false settings, and rejection of non-boolean values. Normal SDK-managed restart was verified with all 8,306,217,216 parameter
+elements resident on logical cuda:1 / physical GPU0, BF16. It used the existing
+supervisor command without an explicit -ResidentText flag.
+
+Fresh live prompt measurements on September 14: before restoration, encoding
+2547?2605 ms and first updated canvas 3555?3620 ms (three samples). After
+restoration, encoding 450?462 ms and first updated canvas 1393?1814 ms (two
+completed samples); another prompt revision superseded the first requested
+sample. These are real live updates with evolving scene input, not identical
+frozen-image benchmarks. A sampled GPU memory reading was 27,079 MiB on GPU0
+and 23,902 MiB on GPU1; this is not a peak measurement.
+
+Evidence: etherea-ai/logs/joyai-encoder-current-20260914.json and
+joyai-encoder-restored-resident-20260914.json. The initial connection needed a
+retry after cold GPU setup. A subsequent selection check saw changing live
+shader values and declined verification; the following SDK selection passed.
+Saved prompt and strength were restored; no shader edits were authored.
+Final live playback check: 31.77 displayed fps, 31.74 browser-to-NDI accepted fps, median capture-to-canvas 1473 ms, p95 frame gap 36 ms and maximum 49 ms. Live output remains RIFE 2x -> SR 2x with NR disabled.
+
+The historical explicit-launch instructions below describe the September 12
+trial. Its statement that normal restarts always use offload is superseded by
+this persistent local setting.
+
+
 Opt-in tested configuration: physical GPU1 runs existing FP8 DiT / BF16 VAE,
 physical GPU0 runs the **unchanged BF16 MiMo-VL encoder**, shaders, NVENC preview
 and FP16 output SR. RIFE remains 2x. No new packages, weights or quantization.
