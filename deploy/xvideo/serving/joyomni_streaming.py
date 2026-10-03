@@ -1229,11 +1229,15 @@ class JoyOmniV2VStreamingSession:
         profile["graph_prompt_capacities"] = sorted(k[2] for k in self.runtime.graph_runners)
         profile["graph_prompt_attention"] = ("sage-prefix" if hasattr(runner.prompt_key_mask, '_sage_prefix') else "cudnn" if runner.mask_prompt else "unmasked")
         runner.in_ref_latent.copy_(ref_chunk_latent.to(self.target_dtype))
-        sigma = self.history_noise.sigma
-        profile["history_sigma"] = sigma
+        from .history_noise import unit_fine_noise
+        sigma, mode = self.history_noise.sigma, self.history_noise.mode
+        profile["history_sigma"], profile["history_mode"] = sigma, mode
         if sigma > 0:
-            runner.in_store_noise.copy_(torch.randn(runner.in_store_noise.shape, generator=self._history_rng(),
-                                                    device=runner.in_store_noise.device, dtype=torch.float32))
+            shape, device = runner.in_store_noise.shape, runner.in_store_noise.device
+            noise = (unit_fine_noise(shape, self._history_rng(), device) if mode == "fine"
+                     else torch.randn(shape, generator=self._history_rng(), device=device, dtype=torch.float32))
+            runner.in_store_noise.copy_(noise)
+        runner.in_store_fine.fill_(1.0 if mode == "fine" else 0.0)
         runner.in_store_sigma.fill_(sigma)
         runner.in_store_timestep.fill_(sigma * 1000.0)
         started = self._timer_start(self.device)
@@ -1420,7 +1424,8 @@ class JoyOmniV2VStreamingSession:
         sigma = 0.0 if active_chunk_id == 0 else self.history_noise.sigma
         profile["history_sigma"] = sigma
         store_latents, store_timestep = noisy_history_latents(
-            current_chunk_latents.to(self.target_dtype), sigma, self._history_rng() if sigma > 0 else None)
+            current_chunk_latents.to(self.target_dtype), sigma, self._history_rng() if sigma > 0 else None,
+            mode=self.history_noise.mode)
         self.pipeline._store_clean_chunk_kv_cache(
             self.pipeline.transformer,
             clean_chunk_latents=store_latents,

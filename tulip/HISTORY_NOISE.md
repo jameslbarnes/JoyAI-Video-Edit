@@ -54,6 +54,25 @@ with sink decay off.
 Continuity (chunk-boundary jump vs typical frame): baseline 2.6x, sigma .10
 2.2x, sigma .20 2.9x (noisy sink). No measurable speed cost.
 
+### Fine-detail mode (2026-10-03, now the default)
+
+Full-latent noise at 0.20 made motion visibly less continuous (James noticed).
+Noising only the fine detail (latent minus a 5x5 blur, noise energy-matched to
+it) keeps broad shapes and motion intact (`scorecard.py`, dog scene):
+
+| Variant | Junk @3 min | Boundary jump | Typical frame change |
+|---|---|---|---|
+| baseline (no fix) | 0.228 | 2.77 | 1.09 |
+| full 0.15 | 0.059 | 2.78 | 1.29 |
+| full 0.20 | 0.052 | 4.42 | 1.61 |
+| **fine 0.20** | **0.047** | **1.84** | **0.81** |
+| fine 0.30 | 0.037 | 2.92 | 1.72 |
+| fine 0.30, timestep 0 | 0.074 | 2.75 | 1.32 |
+
+Fine 0.20 is both cleaner and smoother than the original pipeline; the
+timestep must stay at sigma * 1000 (telling the model the mix is clean lets
+junk back in).
+
 ## Production
 
 `deploy/xvideo/serving/history_noise.py`; eager path in `_denoise_chunk`, graph
@@ -62,7 +81,7 @@ by the captured graph (sigma changes at runtime, no recapture; sigma 0 is
 bit-identical). Chunk 0 (sink) is always stored clean.
 
     GET  http://127.0.0.1:7873/history-noise
-    POST http://127.0.0.1:7873/history-noise  {"sigma": 0.2}
+    POST http://127.0.0.1:7873/history-noise  {"sigma": 0.2, "mode": "fine"}
     POST http://127.0.0.1:7873/history-noise  {"sigma": 0}      # off
 
 Startup value: `tulip/history-noise.json`. With history noise on, set

@@ -779,7 +779,8 @@ def create_app(args: argparse.Namespace) -> FastAPI:
     def history_noise_set(payload: dict) -> JSONResponse:
         # Applies from the next chunk of the current and future sessions; not persisted.
         try:
-            return JSONResponse({'ok': True, 'historyNoise': app.state.history_noise.set(payload.get('sigma'))})
+            return JSONResponse({'ok': True, 'historyNoise': app.state.history_noise.set(
+                payload.get('sigma'), mode=payload.get('mode'))})
         except (TypeError, ValueError) as exc:
             return JSONResponse({'ok': False, 'error': str(exc)}, status_code=400)
 

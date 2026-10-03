@@ -95,6 +95,12 @@ ARMS = {
     "hn15_cleansink": {"eager": True, "history_sigma": 0.15, "clean_sink": True, "decay": 0.0},
     "hn20_cleansink": {"eager": True, "history_sigma": 0.20, "clean_sink": True, "decay": 0.0},
     "hn20_cleansink_decay60": {"eager": True, "history_sigma": 0.20, "clean_sink": True},
+    # Noise only the fine detail (latent minus a small blur): broad shapes and
+    # motion carry over intact, the high-frequency junk path is randomized.
+    "hfn20": {"eager": True, "history_sigma": 0.20, "clean_sink": True, "decay": 0.0, "hf_only": True},
+    "hfn30": {"eager": True, "history_sigma": 0.30, "clean_sink": True, "decay": 0.0, "hf_only": True},
+    "hfn30_t0": {"eager": True, "history_sigma": 0.30, "clean_sink": True, "decay": 0.0, "hf_only": True,
+                 "store_timestep": 0.0},
     # Which memory entry carries the junk: [sink, current] vs [previous, current].
     "sink_only": {"eager": True, "window": 1},
     "no_sink": {"eager": True, "window": 2, "global_sink": False},
@@ -139,6 +145,16 @@ runtime = JoyOmniRuntime.load(
 runtime.output_quality = 95
 meta["load_s"] = round(time.perf_counter() - t0, 1)
 (out / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
+
+
+def latent_blur(x):
+    """5x5 Gaussian (sigma ~1.2) over latent H, W per channel/frame, replicate-padded."""
+    b, c, t, h, w = x.shape
+    k1 = torch.tensor([1., 4., 6., 4., 1.], device=x.device) / 16.0
+    k = (k1[:, None] * k1[None, :]).expand(c, 1, 5, 5)
+    flat = x.permute(0, 2, 1, 3, 4).reshape(b * t, c, h, w)
+    out = torch.nn.functional.conv2d(torch.nn.functional.pad(flat, (2, 2, 2, 2), mode="replicate"), k, groups=c)
+    return out.reshape(b, t, c, h, w).permute(0, 2, 1, 3, 4)
 
 
 def tensor_stats(t):
@@ -209,7 +225,17 @@ for arm in arms:
                 _sigma = 0.0
             noise = torch.randn(clean_chunk_latents.shape, generator=_gen, device=clean_chunk_latents.device,
                                 dtype=torch.float32).to(clean_chunk_latents.dtype)
-            noisy = (1 - _sigma) * clean_chunk_latents + _sigma * noise
+            if cfg.get("hf_only") and _sigma > 0:
+                clean32 = clean_chunk_latents.float()
+                high_clean = clean32 - latent_blur(clean32)
+                n32 = noise.float()
+                high_noise = n32 - latent_blur(n32)
+                high_noise = high_noise / high_noise.std().clamp_min(1e-6) * high_clean.std()
+                noisy = (clean32 + _sigma * (high_noise - high_clean)).to(clean_chunk_latents.dtype)
+            else:
+                noisy = (1 - _sigma) * clean_chunk_latents + _sigma * noise
+            if "store_timestep" in cfg:
+                _sigma = float(cfg["store_timestep"]) / 1000.0
             selected = ([pipeline._kv_cache_memory_id("clean", cid) for cid in (history_chunk_ids or [])]
                         if store_mode == "reuse_store" else [])
             with model.cache_context("cond"):

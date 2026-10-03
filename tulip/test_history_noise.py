@@ -11,8 +11,9 @@ import torch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "deploy"))
-from xvideo.serving.history_noise import (HistoryNoise, load_history_noise_config,  # noqa: E402
-                                          noisy_history_latents, validate_sigma)
+from xvideo.serving.history_noise import (HistoryNoise, latent_blur, load_history_noise_config,  # noqa: E402
+                                          mix_history, noisy_history_latents, unit_fine_noise,
+                                          validate_mode, validate_sigma)
 
 
 class HistoryNoiseTests(unittest.TestCase):
@@ -27,7 +28,7 @@ class HistoryNoiseTests(unittest.TestCase):
 
     def test_flow_matching_mix_and_timestep(self):
         clean = torch.ones(1, 2, 1, 32, 32)
-        out, t = noisy_history_latents(clean, 0.2, torch.Generator().manual_seed(3))
+        out, t = noisy_history_latents(clean, 0.2, torch.Generator().manual_seed(3), mode="full")
         self.assertEqual(t, 200.0)
         noise = (out - 0.8 * clean) / 0.2
         self.assertAlmostEqual(noise.mean().item(), 0.0, delta=0.1)
@@ -40,12 +41,39 @@ class HistoryNoiseTests(unittest.TestCase):
                 validate_sigma(bad)
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / "history-noise.json"
-            self.assertEqual(load_history_noise_config(path), {"sigma": 0.0})
-            path.write_text(json.dumps({"sigma": 0.2}))
-            self.assertEqual(load_history_noise_config(path), {"sigma": 0.2})
+            self.assertEqual(load_history_noise_config(path), {"sigma": 0.0, "mode": "fine"})
+            path.write_text(json.dumps({"sigma": 0.2, "mode": "full"}))
+            self.assertEqual(load_history_noise_config(path), {"sigma": 0.2, "mode": "full"})
+        with self.assertRaises(ValueError):
+            validate_mode("coarse")
         h = HistoryNoise()
-        self.assertEqual(h.set(0.15), {"sigma": 0.15, "enabled": True, "revision": 1})
-        self.assertEqual(h.sigma, 0.15)
+        self.assertEqual(h.set(0.15), {"sigma": 0.15, "mode": "fine", "enabled": True, "revision": 1})
+        self.assertEqual(h.set(mode="full")["sigma"], 0.15)  # partial update keeps sigma
+
+    def test_fine_mode_keeps_broad_structure_and_matches_energy(self):
+        torch.manual_seed(0)
+        smooth = latent_blur(latent_blur(torch.randn(1, 4, 1, 40, 72)))
+        clean = smooth + 0.3 * torch.randn(1, 4, 1, 40, 72)
+        out, t = noisy_history_latents(clean, 0.2, torch.Generator().manual_seed(5), mode="fine")
+        self.assertEqual(t, 200.0)
+        full, _ = noisy_history_latents(clean, 0.2, torch.Generator().manual_seed(5), mode="full")
+        low = lambda x: ((latent_blur(x) - latent_blur(clean)).abs().mean() / latent_blur(clean).abs().mean()).item()
+        self.assertLess(low(out), 0.1)                  # broad shapes carry over...
+        self.assertLess(low(out), 0.35 * low(full))     # ...far better than full-latent noise
+        high_out, high_in = out - latent_blur(out), clean - latent_blur(clean)
+        # Noise is scaled to the clean fine-detail energy, so mixing independent parts at
+        # 0.8/0.2 leaves sqrt(0.8^2 + 0.2^2) ~ 0.82 of it (not a collapse toward smooth).
+        self.assertAlmostEqual((high_out.std() / high_in.std()).item(), (0.8 ** 2 + 0.2 ** 2) ** .5, delta=0.05)
+        self.assertGreater((high_out - high_in).abs().mean().item(), 0.01)  # fine detail actually changed
+        unit = unit_fine_noise((1, 4, 1, 40, 72), torch.Generator().manual_seed(1), "cpu")
+        self.assertAlmostEqual(unit.std().item(), 1.0, places=4)
+
+    def test_zero_sigma_tensor_buffers_are_bit_identical_in_both_modes(self):
+        lat32 = torch.randn(1, 4, 1, 12, 16)
+        noise = torch.randn_like(lat32)
+        for fine in (0.0, 1.0):
+            out = mix_history(lat32, noise, torch.zeros(()), torch.tensor(fine)).to(torch.bfloat16)
+            self.assertTrue(torch.equal(out, lat32.to(torch.bfloat16)), fine)
 
 
 class PipelineStoreTimestepTests(unittest.TestCase):
@@ -90,7 +118,8 @@ class GraphStoreFormulaTests(unittest.TestCase):
 
     def test_graph_source_uses_the_buffers(self):
         src = (ROOT / "deploy/xvideo/serving/graph_runner.py").read_text(encoding="utf-8")
-        self.assertIn("self.in_store_noise.to(torch.float32) * self.in_store_sigma", src)
+        self.assertIn("mix_history(lat32, self.in_store_noise.to(torch.float32),", src)
+        self.assertIn("self.in_store_sigma, self.in_store_fine)", src)
         session = (ROOT / "deploy/xvideo/serving/joyomni_streaming.py").read_text(encoding="utf-8")
         self.assertIn("runner.in_store_timestep.fill_(sigma * 1000.0)", session)
 

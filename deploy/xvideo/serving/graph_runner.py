@@ -111,6 +111,7 @@ class StreamingGraphRunner:
         # changes at runtime without recapture. Zero sigma is bit-identical.
         self.in_store_noise = torch.zeros(latent_shape, device=device, dtype=dtype)
         self.in_store_sigma = torch.zeros((), device=device, dtype=torch.float32)
+        self.in_store_fine = torch.zeros((), device=device, dtype=torch.float32)  # 1 = fine-detail mode
         self.in_prompt = torch.zeros((1, self.txt_len, int(transformer.config.text_states_dim)),
                                      device=device, dtype=dtype)
         # K layout: cached sink/previous/reference, current image and input, text.
@@ -200,8 +201,9 @@ class StreamingGraphRunner:
                 self.in_timestep.fill_(t_val)
                 pred = run_denoise()
                 lat32 = lat32 + pred.to(torch.float32) * dt
-            self.in_store_latent.copy_((lat32 * (1 - self.in_store_sigma)
-                                        + self.in_store_noise.to(torch.float32) * self.in_store_sigma).to(self.dtype))
+            from .history_noise import mix_history
+            self.in_store_latent.copy_(mix_history(lat32, self.in_store_noise.to(torch.float32),
+                                                   self.in_store_sigma, self.in_store_fine).to(self.dtype))
             tf._graph_kv_assembler = None
             tf._graph_kv_writer = self._stage_writer
             try:
