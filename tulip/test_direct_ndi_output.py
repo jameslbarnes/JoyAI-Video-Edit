@@ -195,6 +195,48 @@ class DirectOutput(unittest.TestCase):
         self.assertLess(received[-1][1] - received[0][1], 1)
         self.assertIsNone(publisher.thread)
 
+    def test_transport_error_recovers_after_retry_delay(self):
+        listener = socket.socket()
+        listener.bind(('127.0.0.1', 0))
+        listener.listen(2)
+        listener.settimeout(3)
+        received = []
+
+        def serve():
+            first, _ = listener.accept()
+            first.close()  # bridge drops the first connection mid-stream
+            with listener.accept()[0] as sock:
+                sock.settimeout(3)
+                buf = sock.makefile('rb')
+                hello = json.loads(buf.readline())
+                header = buf.read(20)
+                received.append((hello['width'], struct.unpack('<4sBBHIII', header)[0]))
+
+        server = threading.Thread(target=serve, daemon=True)
+        server.start()
+        publisher = DirectNdiPublisher(port=listener.getsockname()[1], prime_s=0, retry_s=.1)
+        frame = np.zeros((360, 648, 3), np.uint8)
+        try:
+            deadline = time.monotonic() + 5
+            while publisher.error is None and time.monotonic() < deadline:
+                if publisher.available():
+                    publisher.submit([frame] * 4, 16)
+                time.sleep(.02)
+            self.assertIsNotNone(publisher.error)
+            self.assertFalse(publisher.available())  # retry delay not yet elapsed
+            while not received and time.monotonic() < deadline:
+                if publisher.available():
+                    publisher.submit([frame] * 4, 16)
+                time.sleep(.05)
+            self.assertEqual(received, [(648, b'EVSF')])
+            status = publisher.status()
+            self.assertGreaterEqual(status['reconnects'], 1)
+            self.assertIsNotNone(status['last_error'])
+        finally:
+            publisher.close()
+            listener.close()
+            server.join(2)
+
     def test_shader_bridge_keeps_same_socket_and_cadence_during_reset(self):
         listener = socket.socket()
         listener.bind(('127.0.0.1', 0))
@@ -277,6 +319,8 @@ class DirectOutput(unittest.TestCase):
             thread = None
             def submit(self, frames, fps):
                 self.shape, self.fps = frames[0].shape, fps
+            def available(self):
+                return not self.error
             def status(self):
                 return {'error': self.error}
         output = OutputUpscale.__new__(OutputUpscale)

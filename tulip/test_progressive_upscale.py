@@ -34,7 +34,7 @@ class ProgressiveUpscale(unittest.TestCase):
             encoding.set()
             return bytes([int(frame[0,0,0]), quality])
         output.model = SimpleNamespace(process=upscale)
-        output.direct_publisher = SimpleNamespace(error=None,submit=publish, status=lambda: {'error': None})
+        output.direct_publisher = SimpleNamespace(error=None,submit=publish, available=lambda: True, status=lambda: {'error': None})
         output.encode_preview = encode
         return output, published
 

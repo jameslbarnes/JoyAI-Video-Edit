@@ -15,9 +15,16 @@ import numpy as np
 
 
 class DirectNdiPublisher:
-    def __init__(self, host='127.0.0.1', port=7780, max_frames=48, prime_s=.35):
+    def __init__(self, host='127.0.0.1', port=7780, max_frames=48, prime_s=.35, retry_s=2.0, send_timeout_s=2.0):
         self.address = (host, port)
         self.max_frames, self.prime_s = max_frames, prime_s
+        # A transport error used to latch forever (one slow bridge read at restart
+        # killed NDI for hours). Errors now retry after retry_s; a full 1944x1080
+        # RGBA frame is 8.4 MB, so sends get more than the 0.5 s connect timeout.
+        self.retry_s, self.send_timeout_s = retry_s, send_timeout_s
+        self.error_at = None
+        self.last_error = None
+        self.reconnects = 0
         self.condition = threading.Condition()
         self.frames = collections.deque()
         self.thread = self.socket = None
@@ -37,7 +44,7 @@ class DirectNdiPublisher:
     def status(self):
         with self.condition:
             return dict(enabled=self.thread is not None and not self.stopping and not self.error,
-                        error=self.error, sent=self.sent, dropped=self.dropped,
+                        error=self.error, last_error=self.last_error, reconnects=self.reconnects, sent=self.sent, dropped=self.dropped,
                         queued=len(self.frames), max_frames=self.max_frames,
                         last_send_at=self.last_send_at, last_send_ms=self.last_send_ms,
                         geometry=self.geometry, sender_id='primary-joyai',
@@ -140,6 +147,15 @@ class DirectNdiPublisher:
             return self.frames.popleft()
         return None
 
+    def available(self):
+        """True when frames can be submitted; clears a transport error once its retry delay has passed."""
+        with self.condition:
+            if (self.error and not self.stopping and self.thread is None
+                    and time.monotonic() - self.error_at >= self.retry_s):
+                self.error = None
+                self.reconnects += 1
+            return not self.error and not self.stopping
+
     def _record_underrun(self):
         if self.playback_primed and self.transition is None and not self._starved:
             self.underruns += 1
@@ -207,7 +223,7 @@ class DirectNdiPublisher:
         if self.socket is not None:
             self.socket.close()
         sock = socket.create_connection(self.address, timeout=.5)
-        sock.settimeout(.5)
+        sock.settimeout(self.send_timeout_s)
         sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self.socket = sock
         width, height, fps = key
@@ -262,10 +278,15 @@ class DirectNdiPublisher:
         except Exception as exc:
             with self.condition:
                 if not self.stopping:
-                    self.error = f'{type(exc).__name__}: {exc}'
+                    self.error = self.last_error = f'{type(exc).__name__}: {exc}'
+                    self.error_at = time.monotonic()
                     self.dropped += len(self.frames)
                 self.frames.clear()
         finally:
             if self.socket is not None:
                 self.socket.close()
                 self.socket = None
+            with self.condition:
+                if self.thread is threading.current_thread():
+                    self.thread = None  # lets submit() start a fresh worker after retry
+                    self.playback_primed = False

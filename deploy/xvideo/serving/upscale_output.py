@@ -345,7 +345,7 @@ class OutputUpscale:
         if not pixels or len(pixels) > 32:
             raise ValueError('Output accepts 1..32 presentation frames')
         profile = profile if profile is not None else {}
-        if self.direct_requested and not self.direct_publisher.error:
+        if self.direct_requested and self.direct_publisher.available():
             self.direct_publisher.submit(pixels, float(profile.get('presentation_fps', 32)))
         elif self.direct_publisher.thread is not None:
             self.direct_publisher.close()
@@ -425,13 +425,13 @@ class OutputUpscale:
             # consumer requires it; never discard or reinterpret its storage.
             direct_gpu = (self.progressive and self.enabled and self.backend == 'vsr_ultra' and
                           not raw_output and not nr_requested and
-                          ((self.direct_requested and not self.direct_publisher.error) or self.gpu_config))
+                          ((self.direct_requested and self.direct_publisher.available()) or self.gpu_config))
             profile['rife_gpu_handoff'] = {'gpu_input': gpu_input, 'input_download_bytes': 0}
             if gpu_input and not direct_gpu:
                 profile['rife_gpu_handoff']['input_download_bytes'] = sum(f.tensor.numel() for f in frames)
                 frames = [self._cpu_frame(f) for f in frames]
             if (self.progressive and self.enabled and
-                    ((self.direct_requested and not self.direct_publisher.error) or self.gpu_config) and
+                    ((self.direct_requested and self.direct_publisher.available()) or self.gpu_config) and
                     not raw_output and not nr_requested):
                 return self._process_progressive(frames, profile, quality, start)
             if self.gpu_publisher is not None:
@@ -494,7 +494,7 @@ class OutputUpscale:
                     self.enabled, self.error = False, str(exc)
                     pixels = cv2.resize(self._cpu_frame(frame), self.output_size[::-1], interpolation=cv2.INTER_CUBIC)
                 sr_s += time.perf_counter() - tick
-                if self.direct_requested and not self.direct_publisher.error:
+                if self.direct_requested and self.direct_publisher.available():
                     self.direct_publisher.submit([pixels], float(profile.get('presentation_fps', 32)))
                 if first_publish_s is None:
                     first_publish_s = time.perf_counter() - start
