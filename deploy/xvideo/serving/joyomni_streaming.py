@@ -558,6 +558,9 @@ class JoyOmniV2VStreamingSession:
         self._sink_decay_owned = None
         from .cache_decay import CacheDecay
         self.cache_decay = CacheDecay()
+        from .history_noise import HistoryNoise
+        self.history_noise = HistoryNoise()
+        self._history_generator = None
         self._cache_stats = {}
         from .shader_strength import ShaderStrength
         self.shader_strength = ShaderStrength()
@@ -871,6 +874,13 @@ class JoyOmniV2VStreamingSession:
         profile["prompt_apply_s"] = time.perf_counter() - started
         print(f"#####[PROMPT] revision={revision} chunk={chunk_idx} encode={self._prompt_encode_s:.3f}s "
               f"apply={profile['prompt_apply_s']:.3f}s cache_preserved=True", flush=True)
+
+    def _history_rng(self):
+        """Dedicated generator: history noise never shifts the denoise noise sequence."""
+        if self._history_generator is None:
+            self._history_generator = torch.Generator(device=self.device).manual_seed(
+                int(getattr(self.settings, "seed", 0) or 0) + 7919)
+        return self._history_generator
 
     def _decay_sink(self, store, chunk_idx):
         """Fade the scene's first-chunk sink toward the latest committed chunk (see cache_decay)."""
@@ -1219,6 +1229,13 @@ class JoyOmniV2VStreamingSession:
         profile["graph_prompt_capacities"] = sorted(k[2] for k in self.runtime.graph_runners)
         profile["graph_prompt_attention"] = ("sage-prefix" if hasattr(runner.prompt_key_mask, '_sage_prefix') else "cudnn" if runner.mask_prompt else "unmasked")
         runner.in_ref_latent.copy_(ref_chunk_latent.to(self.target_dtype))
+        sigma = self.history_noise.sigma
+        profile["history_sigma"] = sigma
+        if sigma > 0:
+            runner.in_store_noise.copy_(torch.randn(runner.in_store_noise.shape, generator=self._history_rng(),
+                                                    device=runner.in_store_noise.device, dtype=torch.float32))
+        runner.in_store_sigma.fill_(sigma)
+        runner.in_store_timestep.fill_(sigma * 1000.0)
         started = self._timer_start(self.device)
         with self.runtime.stage_timings.measure('dit_graph', self.device, profile.get('chunk_idx'),
                                                prompt_capacity=profile.get('graph_prompt_capacity')):
@@ -1397,9 +1414,17 @@ class JoyOmniV2VStreamingSession:
         self._timer_record(profile, "kv_store_setup_s", started)
 
         started = self._timer_start(self.device)
+        from .history_noise import noisy_history_latents
+        # The scene-start sink is the identity anchor: store it clean. Noising it
+        # washed the picture out toward white within minutes (sigma 0.20 replay).
+        sigma = 0.0 if active_chunk_id == 0 else self.history_noise.sigma
+        profile["history_sigma"] = sigma
+        store_latents, store_timestep = noisy_history_latents(
+            current_chunk_latents.to(self.target_dtype), sigma, self._history_rng() if sigma > 0 else None)
         self.pipeline._store_clean_chunk_kv_cache(
             self.pipeline.transformer,
-            clean_chunk_latents=current_chunk_latents.to(self.target_dtype),
+            clean_chunk_latents=store_latents,
+            timestep_value=store_timestep,
             chunk_temporal_ids=current_chunk_temporal_ids.unsqueeze(0).expand(
                 current_chunk_latents.shape[0], -1
             ),

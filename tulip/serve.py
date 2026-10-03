@@ -59,6 +59,8 @@ app.state.shader_strength = ShaderStrength(**load_strength_config(ROOT / 'tulip/
 from xvideo.serving.cache_decay import CacheDecay, load_decay_config
 app.state.cache_decay = CacheDecay(**load_decay_config(ROOT / 'tulip/cache-decay.json'),
                                    native_fps=native_quality['fps'])
+from xvideo.serving.history_noise import HistoryNoise, load_history_noise_config
+app.state.history_noise = HistoryNoise(**load_history_noise_config(ROOT / 'tulip/history-noise.json'))
 
 @app.get('/native-config')
 def native_config():

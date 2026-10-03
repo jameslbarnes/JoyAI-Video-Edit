@@ -644,6 +644,8 @@ def create_app(args: argparse.Namespace) -> FastAPI:
     app.state.shader_strength = ShaderStrength()
     from xvideo.serving.cache_decay import CacheDecay
     app.state.cache_decay = CacheDecay()
+    from xvideo.serving.history_noise import HistoryNoise
+    app.state.history_noise = HistoryNoise()
     app.state.ws_debug = {}
     app.state.shader_bridges = {}
 
@@ -765,6 +767,19 @@ def create_app(args: argparse.Namespace) -> FastAPI:
             state = app.state.cache_decay.set(payload.get('half_life_s'), mode=payload.get('mode'),
                                               every_chunks=payload.get('every_chunks'))
             return JSONResponse({'ok': True, 'decay': state})
+        except (TypeError, ValueError) as exc:
+            return JSONResponse({'ok': False, 'error': str(exc)}, status_code=400)
+
+    @app.get("/history-noise")
+    def history_noise_status() -> JSONResponse:
+        return JSONResponse({'ok': True, 'historyNoise': app.state.history_noise.snapshot(),
+                             'active': app.state.active_session is not None})
+
+    @app.post("/history-noise")
+    def history_noise_set(payload: dict) -> JSONResponse:
+        # Applies from the next chunk of the current and future sessions; not persisted.
+        try:
+            return JSONResponse({'ok': True, 'historyNoise': app.state.history_noise.set(payload.get('sigma'))})
         except (TypeError, ValueError) as exc:
             return JSONResponse({'ok': False, 'error': str(exc)}, status_code=400)
 
@@ -1293,6 +1308,7 @@ def create_app(args: argparse.Namespace) -> FastAPI:
             )
             created.shader_strength = app.state.shader_strength
             created.cache_decay = app.state.cache_decay
+            created.history_noise = app.state.history_noise
             return created
 
         def _session_health_error(session_ref) -> str | None:

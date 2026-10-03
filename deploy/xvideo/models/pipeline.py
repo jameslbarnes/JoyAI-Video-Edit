@@ -453,6 +453,7 @@ class Pipeline(DiffusionPipeline):
         pre_rope: bool = False,
         cached_temporal_ids: Optional[torch.Tensor] = None,
         store_mode: str = "store",
+        timestep_value: float = 0.0,
     ) -> None:
         if store_mode not in ("store", "reuse_store"):
             raise ValueError(f"`store_mode` must be 'store' or 'reuse_store', got {store_mode!r}.")
@@ -464,8 +465,9 @@ class Pipeline(DiffusionPipeline):
         with model.cache_context("cond"):
             model(
                 hidden_states=clean_chunk_latents,
-                timestep=torch.zeros(
+                timestep=torch.full(
                     (clean_chunk_latents.shape[0],),
+                    float(timestep_value),
                     device=clean_chunk_latents.device,
                     dtype=clean_chunk_latents.dtype,
                 ),

@@ -54,3 +54,6 @@ tulip/*.bak
 tulip/*.flv
 tulip/*.h264
 tulip/*.mp4
+
+# Recorded replay inputs (large video).
+tulip/drift_lab/inputs/
