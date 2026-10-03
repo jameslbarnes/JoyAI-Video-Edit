@@ -45,12 +45,28 @@ def load_history_noise_config(path):
     return {'sigma': validate_sigma(config.get('sigma', 0)), 'mode': validate_mode(config.get('mode', 'fine'))}
 
 
+_BLUR_KERNELS = {}
+
+
+def _blur_kernel(device, dtype, channels):
+    # Built once per device/dtype/channels and reused: creating it inside a
+    # CUDA graph capture is a host-to-device copy, which invalidates the
+    # capture (2026-10-03). The graph runner's warm-up pass builds it first.
+    key = (str(device), dtype, channels)
+    kernel = _BLUR_KERNELS.get(key)
+    if kernel is None:
+        import torch
+        k1 = torch.tensor([1., 4., 6., 4., 1.], dtype=dtype) / 16.0
+        kernel = (k1[:, None] * k1[None, :]).expand(channels, 1, 5, 5).contiguous().to(device)
+        _BLUR_KERNELS[key] = kernel
+    return kernel
+
+
 def latent_blur(x):
     """5x5 binomial blur over the spatial dims of a (B, C, T, H, W) latent."""
     import torch
     b, c, t, h, w = x.shape
-    k1 = torch.tensor([1., 4., 6., 4., 1.], device=x.device, dtype=x.dtype) / 16.0
-    k = (k1[:, None] * k1[None, :]).expand(c, 1, 5, 5)
+    k = _blur_kernel(x.device, x.dtype, c)
     flat = x.permute(0, 2, 1, 3, 4).reshape(b * t, c, h, w)
     out = torch.nn.functional.conv2d(torch.nn.functional.pad(flat, (2, 2, 2, 2), mode='replicate'), k, groups=c)
     return out.reshape(b, t, c, h, w).permute(0, 2, 1, 3, 4)
