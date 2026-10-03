@@ -73,6 +73,26 @@ Fine 0.20 is both cleaner and smoother than the original pipeline; the
 timestep must stay at sigma * 1000 (telling the model the mix is clean lets
 junk back in).
 
+### Dial interaction (2026-10-03)
+
+History noise weakens the shader-strength dial at low/mid settings, where
+reference conditioning is the only input path (fractal shader replay, same
+input/prompt/seed, `dial_score.py`):
+
+| Strength | Noise | Structure | Edges | Motion tracking |
+|---|---|---|---|---|
+| 0.10 | off | -0.13 | 0.05 | 0.21 |
+| 0.10 | fine .20 | -0.16 | 0.05 | 0.02 |
+| 0.45 | off | 0.47 | 0.29 | 0.21 |
+| 0.45 | fine .20 | 0.27 | 0.26 | 0.08 |
+| 0.90 | off | 0.94 | 0.56 | 0.28 |
+| 0.90 | fine .20 | 0.91 | 0.56 | 0.55 |
+
+At 0.9 (starting blend active) noise is harmless. Live default lowered to
+fine 0.10 as a compromise; not yet validated for junk or dial. Separately,
+spinning/zooming at very low dial values (0.086 -> output rotation 34 deg/s vs
+input 4.5) is the dial, not the noise: it persists with noise off.
+
 ## Production
 
 `deploy/xvideo/serving/history_noise.py`; eager path in `_denoise_chunk`, graph

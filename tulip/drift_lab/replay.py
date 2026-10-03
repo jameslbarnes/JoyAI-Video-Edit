@@ -109,6 +109,16 @@ ARMS = {
     "hist_ref20": {"eager": True, "history_ref": 0.2},
 }
 arms = [a for a in args.arms.split(",") if a]
+# Dial sweeps: s45_n20 = strength 0.45, fine history noise 0.20 (n0 = off); all
+# eager, clean sink, decay off, so only the dial and the noise differ.
+import re as _re
+for _a in arms:
+    _m = _re.fullmatch(r"s(\d+)_n(\d+)", _a)
+    if _m:
+        _cfg = {"strength": int(_m.group(1)) / 100, "eager": True, "decay": 0.0, "clean_sink": True, "hf_only": True}
+        if int(_m.group(2)):
+            _cfg["history_sigma"] = int(_m.group(2)) / 100
+        ARMS[_a] = _cfg
 unknown = [a for a in arms if a not in ARMS]
 if unknown:
     ap.error(f"unknown arms {unknown}; known {sorted(ARMS)}")
