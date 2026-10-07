@@ -168,6 +168,11 @@ class GpuVideoPublisher(DirectNdiPublisher):
     def _open(self, key):
         import PyNvVideoCodec as nvc
         w,h,fps = key
+        # On a single GPU, selecting device 0 / a pooled stream can be a no-op
+        # on a new encoder thread. Launch on Torch's primary context before
+        # handing the thread-local CUDA context to NVENC.
+        self.rgba = torch.empty((h,w,4),device=self.device,dtype=torch.uint8)
+        self.rgba[:,:,3] = 255
         context = ctypes.c_void_p()
         if ctypes.WinDLL('nvcuda.dll').cuCtxGetCurrent(ctypes.byref(context)) != 0 or not context.value:
             raise RuntimeError('No active Torch CUDA context for NVENC')
@@ -178,8 +183,6 @@ class GpuVideoPublisher(DirectNdiPublisher):
             fps=round(fps),gop=round(fps),idrperiod=round(fps),bf=0,lookahead=0,
             colorspace='bt709',repeatspspps=1,max_res=[w,h],qmin=0)
         if self.nvenc.GetNumBFrames() != 0: raise RuntimeError('GPU publisher requires no B-frame reordering')
-        self.rgba = torch.empty((h,w,4),device=self.device,dtype=torch.uint8)
-        self.rgba[:,:,3] = 255
         self.cuda_frame = CudaRgba(self.rgba,self.stream)
         self.flv = FlvH264()
         self.output_index = 0
