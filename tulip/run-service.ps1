@@ -9,6 +9,12 @@ if($SingleGpu96GB){
   if([double]$memory[0] -lt 90000){throw 'Single-GPU mode requires a 96GB card'}
   if(-not $PrintConfiguration -and [double]$memory[1] -lt 70000){throw 'Single-GPU mode requires at least 70,000 MiB free; release the previous primary through SDK first'}
   if(-not $PrintConfiguration -and (Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory -lt 20*1024*1024){throw 'Cold loading requires at least 20 GiB free host RAM'}
+  if ($env:JOYAI_POWER_LIMIT_W -and -not $PrintConfiguration) {
+    $powerLimit = [int]$env:JOYAI_POWER_LIMIT_W
+    if ($powerLimit -lt 150 -or $powerLimit -gt 600) { throw 'JOYAI_POWER_LIMIT_W must be between 150 and 600' }
+    & nvidia-smi -i 0 -pl $powerLimit | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Could not apply the configured single-GPU power limit' }
+  }
   $TextGpu=0
   $UpscaleGpu=0
 }
