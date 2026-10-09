@@ -12,8 +12,14 @@ if($SingleGpu96GB){
   if ($env:JOYAI_POWER_LIMIT_W -and -not $PrintConfiguration) {
     $powerLimit = [int]$env:JOYAI_POWER_LIMIT_W
     if ($powerLimit -lt 150 -or $powerLimit -gt 600) { throw 'JOYAI_POWER_LIMIT_W must be between 150 and 600' }
-    & nvidia-smi -i 0 -pl $powerLimit | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'Could not apply the configured single-GPU power limit' }
+    $observedPower = & nvidia-smi -i 0 --query-gpu=power.limit --format=csv,noheader,nounits
+    if ($LASTEXITCODE -ne 0) { throw 'Could not read the single-GPU power limit' }
+    if ([double]$observedPower -ne $powerLimit) {
+      & nvidia-smi -i 0 -pl $powerLimit | Out-Null
+      if ($LASTEXITCODE -ne 0) { throw 'Could not apply the configured single-GPU power limit; set it from an elevated operator session before starting the limited-user runtime' }
+      $observedPower = & nvidia-smi -i 0 --query-gpu=power.limit --format=csv,noheader,nounits
+      if ($LASTEXITCODE -ne 0 -or [double]$observedPower -ne $powerLimit) { throw 'GPU power-limit readback did not match the configured limit' }
+    }
   }
   $TextGpu=0
   $UpscaleGpu=0
