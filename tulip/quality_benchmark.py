@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT / 'deploy'))
 parser = argparse.ArgumentParser()
 parser.add_argument('--out', required=True)
 parser.add_argument('--frames', type=int, default=193)
+parser.add_argument('--target-native-fps', type=float, default=16)
 parser.add_argument('--sizes', default='648x360,768x432,840x480,864x480')
 parser.add_argument('--profile-timings', action=argparse.BooleanOptionalAction, default=True)
 parser.add_argument('--vae-device', default='cuda:0', choices=['cuda:0','cuda:1'])
@@ -138,6 +139,9 @@ for size_index, (width, height) in enumerate(sizes):
         warm = result['chunks'][5:]
         base = result['chunks'][4]['at_s']
         gaps = [c['at_s'] - (warm[i-1]['at_s'] if i else base) for i,c in enumerate(warm)]
+        from xvideo.serving.cadence_metrics import interval_metrics
+        result['chunkTiming'] = interval_metrics([gap*1000 for gap in gaps], 8/args.target_native_fps*1000)
+        result['cadenceScope'] = 'Native chunk completion only; live projector acceptance is required before claiming smooth playback.'
         result.update(status='generated_pending_visual_review', native_fps=sum(c['count'] for c in warm)/(warm[-1]['at_s']-base),
             chunk_median_ms=statistics.median(gaps)*1000, chunk_p95_ms=float(np.percentile(gaps,95))*1000,
             peak_allocated_gib=torch.cuda.max_memory_allocated()/2**30,

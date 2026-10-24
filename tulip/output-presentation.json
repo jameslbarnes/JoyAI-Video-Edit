@@ -4,13 +4,14 @@
   "progressive": true,
   "gpu_video": {
     "enabled": true,
-    "height": 1440,
+    "height": 1080,
     "bitrate": 8000000,
-    "url": "rtmp://127.0.0.1:1935/joyai-gpu",
-    "ffmpeg": "C:/Users/Admin/src/easel/external/ffmpeg-master-latest-win64-gpl-shared/bin/ffmpeg.exe"
+    "url": "rtmp://127.0.0.1:1935/rtx6000-joyai",
+    "ffmpeg": "C:\\Users\\Daisy\\easel\\external\\ffmpeg-master-latest-win64-gpl-shared\\bin\\ffmpeg.exe"
   },
   "denoise": 0.25,
   "backend": "vsr_ultra",
   "preload_vsr": true,
-  "rife_gpu": true
+  "rife_gpu": true,
+  "local_transport": "spout"
 }

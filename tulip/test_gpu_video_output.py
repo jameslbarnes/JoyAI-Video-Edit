@@ -88,6 +88,9 @@ class GpuVideoContract(unittest.TestCase):
             self.assertEqual(p.returncode,0,err)
             self.assertEqual(out,b'H'+bytes(range(32)))
             states=[json.loads(line) for line in err.splitlines()]
+            if sys.platform == 'win32':
+                self.assertTrue(states[-1]['delivery_priority']['ok'])
+                self.assertEqual(states[-1]['delivery_priority']['value'], 0x8000)
             self.assertEqual(states[-1]['sent'],32)
             self.assertEqual(states[-1]['underruns'],0)
             self.assertLess(states[-1]['max_gap_ms'],75)

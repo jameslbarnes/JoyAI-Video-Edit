@@ -495,6 +495,8 @@ class JoyOmniV2VStreamingSession:
         self.cfg = runtime.cfg
         self.raw_prompt = prompt
         self.prompt = prompt
+        from .prompt_timing import PromptTiming
+        self.prompt_timing = PromptTiming(prompt)
         self.settings = settings
         self.ref_image = ref_image.convert("RGB") if ref_image is not None else None
         self.ref_image_latent: torch.Tensor | None = None
@@ -746,6 +748,10 @@ class JoyOmniV2VStreamingSession:
     @torch.no_grad()
     def _encode_prompt_value(self, text: str, anchor_frame: Image.Image) -> torch.Tensor:
         prompt_image = self._resize_frame(anchor_frame)
+        # The vision tokenizer accepts PIL. Download only the prompt anchor,
+        # not every shader frame used by the VAE.
+        if hasattr(prompt_image, "to_pil"):
+            prompt_image = prompt_image.to_pil()
         prompt = f"<|im_start|>user\n<image>\n{text}<|im_end|>\n"
 
         max_sequence_length = self.settings.max_sequence_length or int(self.cfg.text_token_max_length)
@@ -770,6 +776,7 @@ class JoyOmniV2VStreamingSession:
             if self._closing:
                 raise ValueError("session is closing")
             self._prompt_request += 1
+            self.prompt_timing.requested(self._prompt_request, prompt)
             self._pending_prompt = (self._prompt_request, prompt, self._latest_source_frame.copy())
             self._prepared_prompt = None
             self._prompt_error = None
@@ -790,9 +797,11 @@ class JoyOmniV2VStreamingSession:
                     return
             revision, prompt, anchor = request
             started = time.perf_counter()
+            self.prompt_timing.stage(revision, 'encode_started_ms')
             try:
                 embeds = self._encode_prompt_value(prompt, anchor)
                 self._prepare_prompt_graph(embeds, revision)
+                self.prompt_timing.stage(revision, 'encode_finished_ms')
                 with self._prompt_lock:
                     if revision == self._prompt_request and not self._closing:
                         self._prepared_prompt = (revision, prompt, embeds)
@@ -854,6 +863,9 @@ class JoyOmniV2VStreamingSession:
             prepared = self._prepared_prompt
             self._prepared_prompt = None
             if prepared is None or prepared[0] != self._prompt_request:
+                # Initial revision has no asynchronous prompt update; stamp its
+                # first actual denoise boundary, not the later output callback.
+                self.prompt_timing.frame(self._prompt_revision, chunk_idx)
                 return
         revision, prompt, embeds = prepared
         started = time.perf_counter()
@@ -872,6 +884,7 @@ class JoyOmniV2VStreamingSession:
             if revision == self._prompt_request:
                 self._prompt_status = "applied"
         profile["prompt_apply_s"] = time.perf_counter() - started
+        self.prompt_timing.applied(revision, chunk_idx)
         print(f"#####[PROMPT] revision={revision} chunk={chunk_idx} encode={self._prompt_encode_s:.3f}s "
               f"apply={profile['prompt_apply_s']:.3f}s cache_preserved=True", flush=True)
 
@@ -936,6 +949,8 @@ class JoyOmniV2VStreamingSession:
         self._cache_stats = stats
         profile.update(prompt_revision=self._prompt_revision, prompt_status=self._prompt_status,
                        prompt_error=self._prompt_error, cache=stats)
+        origin = self.prompt_timing.frame(self._prompt_revision, chunk_idx)
+        profile['prompt_origin'] = origin.as_dict() if origin else None
 
     @torch.no_grad()
     def _encode_ref_image_latent(self) -> torch.Tensor | None:
@@ -985,6 +1000,9 @@ class JoyOmniV2VStreamingSession:
         return np.asarray(frame, dtype=np.float32)
 
     def _update_static_anchor(self, chunk_idx: int, source_frames: list[Image.Image]) -> int | None:
+        if not self.settings.freeze_kv_on_static:
+            self._static_anchor_id = None
+            return None
         gray = self._chunk_last_frame_gray(source_frames)
         if not self.settings.freeze_kv_on_static or chunk_idx == 0 or gray is None:
             self._prev_static_gray = gray if gray is not None else self._prev_static_gray
@@ -2222,8 +2240,19 @@ class JoyOmniV2VStreamingSession:
         return frame.resize((self.settings.width, self.settings.height), resampling)
 
     def _frames_to_tensor(self, frames: list[Image.Image], *, source_job=None) -> torch.Tensor:
-        arrays = [np.asarray(self._resize_frame(frame), dtype=np.uint8) for frame in frames]
-        u8 = torch.from_numpy(np.stack(arrays, axis=0))
+        from .spout_input import GpuInputFrame
+        resized = [self._resize_frame(frame) for frame in frames]
+        if all(isinstance(frame, GpuInputFrame) for frame in resized):
+            u8 = torch.stack([frame.tensor() for frame in resized])
+            source_device = u8.device
+            encode_device = _module_device(self.pipeline.vae)
+            if source_device != encode_device:
+                for frame in resized:
+                    if frame.metrics is not None:
+                        frame.metrics["cross_gpu_bytes"] += frame.pixels.numel()
+        else:
+            arrays = [np.asarray(frame, dtype=np.uint8) for frame in resized]
+            u8 = torch.from_numpy(np.stack(arrays, axis=0))
         if torch.cuda.is_available():
             encode_device = _module_device(self.pipeline.vae)
             if encode_device.type == "cuda":

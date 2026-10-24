@@ -9,6 +9,17 @@ from xvideo.serving.upscale_output import OutputUpscale
 
 
 class ProgressiveUpscale(unittest.TestCase):
+    def test_rollback_keeps_serial_preview_contract_for_new_clients(self):
+        output, published = self.make_output()
+        frames = [np.full((360, 648, 3), i, np.uint8) for i in [1, 2, 3]]
+        with ThreadPoolExecutor(max_workers=2) as output.encoder:
+            previews = output._process_progressive(frames, {"presentation_fps": 32},
+                95, time.perf_counter(), defer_preview=True)
+        self.assertEqual(published, [1, 2, 3])
+        self.assertEqual(previews, [bytes([i, 95]) for i in [1, 2, 3]])
+        self.assertFalse(output.last["preview_deferred"])
+        self.assertEqual(output.last["preview_execution"], "serial_gpu_cpu_jpeg_workers")
+
     def make_output(self, fail=False):
         output = OutputUpscale.__new__(OutputUpscale)
         output.enabled, output.error = True, None

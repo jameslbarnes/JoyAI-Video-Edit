@@ -201,6 +201,21 @@ class OutputUpscale:
             height = cfg.get('height', 720)
             if type(height) is not int or height not in (720, 1080, 1440):
                 raise ValueError('Output height must be 720, 1080 or 1440')
+            ndi_format = cfg.get('ndi_pixel_format', 'rgba')
+            if ndi_format not in ('rgba', 'uyvy'):
+                raise ValueError('NDI pixel format must be rgba or uyvy')
+            local_transport = cfg.get('local_transport', 'ndi')
+            if local_transport not in ('ndi', 'spout'):
+                raise ValueError('Local transport must be ndi or spout')
+            spout_copy_priority = cfg.get('spout_copy_priority', 0)
+            if type(spout_copy_priority) is not int or spout_copy_priority not in (0, -1):
+                raise ValueError('Spout copy priority must be 0 or -1')
+            spout_transition_reserve = cfg.get('spout_transition_reserve', 2)
+            if type(spout_transition_reserve) is not int or not 2 <= spout_transition_reserve <= 6:
+                raise ValueError('Spout transition reserve must be an integer in [2,6]')
+            spout_profile_preparation = cfg.get('spout_profile_preparation', False)
+            if type(spout_profile_preparation) is not bool:
+                raise ValueError('Spout preparation profile must be boolean')
             direct = cfg.get('direct_ndi', False)
             if type(direct) is not bool:
                 raise ValueError('direct_ndi must be boolean')
@@ -214,6 +229,10 @@ class OutputUpscale:
             backend = cfg.get('backend', 'realesrgan')
             if backend not in ('realesrgan', 'vsr_ultra'):
                 raise ValueError('SR backend must be realesrgan or vsr_ultra')
+            if ndi_format == 'uyvy' and (backend != 'vsr_ultra' or not progressive):
+                raise ValueError('GPU UYVY NDI requires progressive VSR output')
+            if local_transport == 'spout' and (backend != 'vsr_ultra' or not progressive):
+                raise ValueError('Spout requires progressive VSR output')
             preload_vsr = cfg.get('preload_vsr', False)
             if type(preload_vsr) is not bool:
                 raise ValueError('preload_vsr must be boolean')
@@ -246,6 +265,26 @@ class OutputUpscale:
             self.direct_requested = direct
             self.progressive = progressive
             self.rife_gpu = rife_gpu
+            if (local_transport != getattr(self.direct_publisher, 'transport', 'ndi') or
+                    (local_transport == 'ndi' and
+                     (ndi_format == 'uyvy') != bool(getattr(self.direct_publisher, 'gpu_input', False)))):
+                # The format is changed only at a chunk boundary. Keep the bridge
+                # sender identity; close/drain the previous owned frame queue.
+                if local_transport == 'spout':
+                    from .spout_output import GpuSpoutPublisher
+                    replacement = GpuSpoutPublisher(self.device)
+                elif ndi_format == 'uyvy':
+                    from .gpu_ndi_output import GpuNdiPublisher
+                    replacement = GpuNdiPublisher(self.device)
+                else:
+                    from .direct_ndi_output import DirectNdiPublisher
+                    replacement = DirectNdiPublisher()
+                self.direct_publisher.close()
+                self.direct_publisher = replacement
+            if local_transport == 'spout':
+                self.direct_publisher.configure_copy_priority(spout_copy_priority)
+                self.direct_publisher.configure_transition_reserve(spout_transition_reserve)
+                self.direct_publisher.configure_preparation_profile(spout_profile_preparation)
             self.output_size = (height, height * 9 // 5)
             self.config_error = None
         except (OSError, ValueError, AttributeError, RuntimeError) as exc:
@@ -300,6 +339,7 @@ class OutputUpscale:
         return {'supported': True, 'enabled': self.enabled, 'loaded': self.model is not None,
                 'device': self.device, 'physical_gpu': visible[index] if index < len(visible) else None,
                 'backend': self.backend, 'prewarmed_backends': list(self.models),
+                'vsr': getattr(self.models.get('vsr_ultra'), 'status', lambda: None)(),
                 'precision': 'float32-io' if self.backend == 'vsr_ultra' else 'float16',
                 'scale': self.output_size[0] / native_height if self.enabled else 1,
                 'width': self.output_size[1] if self.enabled else native_width,
@@ -385,13 +425,15 @@ class OutputUpscale:
                     vsr.process(np.zeros((*self.native_size, 3), dtype=np.uint8), graph_size)
                     self.models['vsr_ultra'] = vsr
                 self.model = self.models[self.backend]
+                if getattr(self.direct_publisher, 'gpu_input', False):
+                    self.direct_publisher.warmup(self.output_size)
                 self.warmup_s = time.perf_counter() - start
                 self.neural_rendering.process([np.zeros((720, 1296, 3), dtype=np.uint8)])
             except Exception as exc:
                 self.error, self.enabled, self.model = str(exc), False, None
                 print(f'#####[SR] Native-output fallback: {exc!r}', flush=True)
 
-    def process(self, frames, profile, quality=95, *, raw_output=False):
+    def process(self, frames, profile, quality=95, *, raw_output=False, defer_preview=False):
         if not frames or len(frames) > 32:
             raise ValueError('SR accepts one bounded presentation chunk (1..32 frames)')
         from .native_config import NATIVE_SIZES
@@ -463,7 +505,7 @@ class OutputUpscale:
                                   'device': self.device, 'precision': 'float16'}
             return output
 
-    def _process_progressive(self, frames, profile, quality, start):
+    def _process_progressive(self, frames, profile, quality, start, *, defer_preview=False):
         """Publish completed pixels in order; overlap bounded CPU preview work."""
         futures = []
         sr_s = 0.
@@ -471,20 +513,36 @@ class OutputUpscale:
         try:
             for frame in frames:
                 tick = time.perf_counter()
+                ndi_frame = None
                 try:
                     if not self.enabled:
                         raise RuntimeError(self.error)
                     gpu = getattr(self,'gpu_publisher',None)
-                    if gpu is not None and not gpu.error:
-                        gpu_frame=self.model.process_gpu(frame,gpu_output_size(self.gpu_config['height']))
-                        gpu.submit([gpu_frame],float(profile.get('presentation_fps',32)))
-                        # Only the independent <=1080p NDI/preview branch downloads.
-                        # Mobile's high-resolution pixels stay resident through encode.
+                    gpu_ndi = bool(getattr(self.direct_publisher, 'gpu_input', False))
+                    if (gpu is not None and not gpu.error) or gpu_ndi:
+                        size = gpu_output_size(self.gpu_config['height']) if gpu is not None and not gpu.error else self.output_size
+                        gpu_frame=self.model.process_gpu(frame,size)
+                        if gpu is not None and not gpu.error:
+                            gpu.submit([gpu_frame],float(profile.get('presentation_fps',32)))
                         with torch.cuda.device(self.model.device),torch.cuda.stream(self.model.stream):
                             preview=gpu_frame.wait()
                             if tuple(preview.shape[:2])!=self.output_size:
                                 preview=F.interpolate(preview.permute(2,0,1)[None].float(),size=self.output_size,
                                     mode='bicubic',align_corners=False,antialias=True)[0].permute(1,2,0).clamp_(0,255).byte()
+                            if gpu_ndi:
+                                from .gpu_video_output import GpuFrame
+                                ndi_frame = gpu_frame if preview is gpu_frame.tensor else GpuFrame.record(preview.contiguous())
+                                # A fresh CPU wrapper preserves pixel/event ownership. Do not
+                                # mutate a frame already queued in the independent web output.
+                                if profile.get('prompt_origin'):
+                                    from .prompt_timing import FrameOrigin
+                                    ndi_frame = GpuFrame(ndi_frame.tensor, ndi_frame.ready,
+                                                        FrameOrigin(**profile['prompt_origin']))
+                                # NDI retains GPU pixels. Only the small independent
+                                # desktop JPEG preview downloads RGB to the CPU.
+                                if preview.shape[0] > 720:
+                                    preview = F.interpolate(preview.permute(2,0,1)[None].float(),
+                                        size=(720,1296),mode='area')[0].permute(1,2,0).round_().clamp_(0,255).byte()
                             pixels=preview.cpu().numpy()
                     else:
                         pixels = self.model.process(frame, self.output_size)
@@ -495,7 +553,7 @@ class OutputUpscale:
                     pixels = cv2.resize(self._cpu_frame(frame), self.output_size[::-1], interpolation=cv2.INTER_CUBIC)
                 sr_s += time.perf_counter() - tick
                 if self.direct_requested and self.direct_publisher.available():
-                    self.direct_publisher.submit([pixels], float(profile.get('presentation_fps', 32)))
+                    self.direct_publisher.submit([ndi_frame if ndi_frame is not None else pixels], float(profile.get('presentation_fps', 32)))
                 if first_publish_s is None:
                     first_publish_s = time.perf_counter() - start
                 futures.append(self.encoder.submit(self.encode_preview, pixels, max(1, min(100, int(quality)))))
@@ -513,6 +571,7 @@ class OutputUpscale:
                      'total_s': time.perf_counter()-start, 'count': len(output),
                      'width': self.output_size[1], 'height': self.output_size[0],
                      'progressive': True, 'first_publish_s': first_publish_s,
+                     'preview_deferred': False, 'preview_execution': 'serial_gpu_cpu_jpeg_workers',
                      'rife_gpu_handoff': profile.get('rife_gpu_handoff'),
                      'neural_rendering': self.neural_rendering.status()}
         preview_height = min(self.output_size[0], 720)

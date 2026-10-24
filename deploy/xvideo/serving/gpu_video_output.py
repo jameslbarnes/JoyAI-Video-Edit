@@ -30,6 +30,7 @@ H264_COLOR_METADATA = 'h264_metadata=video_full_range_flag=1:colour_primaries=1:
 class GpuFrame:
     tensor: torch.Tensor  # immutable HWC RGB uint8 on the output GPU
     ready: object
+    origin: object = None  # Immutable prompt/chunk provenance; no pixel readback.
 
     @property
     def shape(self): return self.tensor.shape
@@ -155,19 +156,31 @@ class GpuVideoPublisher(DirectNdiPublisher):
     def _resize_source(self, source, key):
         # Only the small native shader input crosses into this output GPU.
         w,h,_ = key
-        source = np.asarray(source,dtype=np.uint8)
-        if source.shape != (360,648,3): raise ValueError('GPU shader bridge must remain native sized')
-        tensor = torch.from_numpy(source.copy()).to(self.device)
+        from .spout_input import GpuInputFrame
+        if isinstance(source, GpuInputFrame):
+            tensor = source.tensor(self.device)
+        else:
+            source = np.asarray(source,dtype=np.uint8)
+            if source.shape != (360,648,3): raise ValueError('GPU shader bridge must remain native sized')
+            tensor = torch.from_numpy(source.copy()).to(self.device)
         tensor = F.interpolate(tensor.permute(2,0,1)[None].float(),size=(h,w),mode='bilinear',align_corners=False)
         return GpuFrame.record(tensor[0].permute(1,2,0).round_().clamp_(0,255).byte().contiguous())
 
     def _blend(self, first, second, mix):
         a,b = first.wait(),second.wait()
-        return GpuFrame.record(torch.lerp(a.float(),b.float(),mix).round_().clamp_(0,255).byte())
+        from .prompt_timing import blended_origin
+        result = GpuFrame.record(torch.lerp(a.float(),b.float(),mix).round_().clamp_(0,255).byte())
+        result.origin = blended_origin(first.origin, second.origin, mix)
+        return result
 
     def _open(self, key):
         import PyNvVideoCodec as nvc
         w,h,fps = key
+        # On a single GPU, selecting device 0 / a pooled stream can be a no-op
+        # on a new encoder thread. Launch on Torch's primary context before
+        # handing the thread-local CUDA context to NVENC.
+        self.rgba = torch.empty((h,w,4),device=self.device,dtype=torch.uint8)
+        self.rgba[:,:,3] = 255
         context = ctypes.c_void_p()
         if ctypes.WinDLL('nvcuda.dll').cuCtxGetCurrent(ctypes.byref(context)) != 0 or not context.value:
             raise RuntimeError('No active Torch CUDA context for NVENC')
@@ -178,8 +191,6 @@ class GpuVideoPublisher(DirectNdiPublisher):
             fps=round(fps),gop=round(fps),idrperiod=round(fps),bf=0,lookahead=0,
             colorspace='bt709',repeatspspps=1,max_res=[w,h],qmin=0)
         if self.nvenc.GetNumBFrames() != 0: raise RuntimeError('GPU publisher requires no B-frame reordering')
-        self.rgba = torch.empty((h,w,4),device=self.device,dtype=torch.uint8)
-        self.rgba[:,:,3] = 255
         self.cuda_frame = CudaRgba(self.rgba,self.stream)
         self.flv = FlvH264()
         self.output_index = 0

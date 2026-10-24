@@ -28,6 +28,8 @@ from PIL import Image
 import uvicorn
 
 from xvideo.serving.session_watchdog import SessionWatchdog
+from xvideo.serving.frame_deadline import FrameDeadlineExceeded, run_frame_with_deadline
+from xvideo.serving.fresh_input import capture_model_input
 from xvideo.serving.pe import DEFAULT_MODEL as DEFAULT_PE_MODEL
 from xvideo.serving.joyomni_streaming import (
     JoyOmniRuntime,
@@ -684,6 +686,8 @@ def create_app(args: argparse.Namespace) -> FastAPI:
             {
                 "ok": True,
                 "runtime_loaded": app.state.runtime is not None,
+                "input_transport": (app.state.spout_input.status()
+                    if getattr(app.state, "spout_input", None) is not None else {"transport": "mjpeg"}),
                 "textEncoder": encoder_status(app.state.runtime.pipeline if app.state.runtime is not None else None),
                 "upscale": app.state.upscaler.status() if app.state.upscaler else {"supported": False, "enabled": False},
                 "dit_ckpt": args.dit_ckpt,
@@ -718,6 +722,12 @@ def create_app(args: argparse.Namespace) -> FastAPI:
             }
         )
 
+    @app.get("/debug/frame-trace")
+    def frame_trace() -> JSONResponse:
+        publisher = getattr(getattr(app.state, 'upscaler', None), 'direct_publisher', None)
+        reader = getattr(publisher, 'frame_trace', None)
+        return JSONResponse(reader() if reader else {'version': 1, 'supported': False, 'frames': []})
+
     @app.get("/debug")
     def debug() -> JSONResponse:
         from .memory_status import memory_status
@@ -750,10 +760,25 @@ def create_app(args: argparse.Namespace) -> FastAPI:
         if app.state.active_session is None:
             return JSONResponse({'ok': False, 'error': 'no active JoyAI session'}, status_code=409)
         try:
-            state = app.state.shader_strength.set(payload.get('value'), mode=payload.get('mode'))
+            state = app.state.shader_strength.set(payload.get('value'), mode=payload.get('mode'),
+                                                  output_mix=payload.get('outputMix'))
             return JSONResponse({'ok': True, 'strength': state, 'status': 'queued'})
         except ValueError as exc:
             return JSONResponse({'ok': False, 'error': str(exc)}, status_code=400)
+        except OSError:
+            return JSONResponse({'ok': False, 'error': 'Shader setting could not be saved; change was not applied'}, status_code=503)
+
+    @app.post("/shader-overlay")
+    def shader_overlay_set(payload: dict) -> JSONResponse:
+        if app.state.active_session is None:
+            return JSONResponse({'ok': False, 'error': 'no active JoyAI session'}, status_code=409)
+        try:
+            state = app.state.shader_strength.set_overlay(payload.get('value'))
+            return JSONResponse({'ok': True, 'strength': state, 'status': 'queued'})
+        except ValueError as exc:
+            return JSONResponse({'ok': False, 'error': str(exc)}, status_code=400)
+        except OSError:
+            return JSONResponse({'ok': False, 'error': 'Shader setting could not be saved; change was not applied'}, status_code=503)
 
     @app.get("/cache-decay")
     def cache_decay_status() -> JSONResponse:
@@ -898,8 +923,12 @@ def create_app(args: argparse.Namespace) -> FastAPI:
 
         output_quality = 60 if args.output_quality == "auto" else int(args.output_quality)
         output_codec = "mjpeg"
+        independent_preview = False
+        preview_consumer = None
         h264_stream: _H264Stream | None = None
         h264_ingest: _H264Ingest | None = None
+        spout_input = None
+        spout_bridge = None
         input_sniffed = False
         max_temporal_ids = args.max_temporal_ids
         freeze_kv_on_static = args.freeze_kv_on_static
@@ -981,6 +1010,9 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                 ws_debug["last_send_at"] = time.time()
                 ws_debug["send_state"] = "idle"
 
+        from .shader_control_queue import ShaderControlQueue
+        shader_controls = ShaderControlQueue(app.state.shader_strength, _send_json)
+
         async def _send_encoded_frames(
             encoded_frames: list[bytes],
             source_metas: list[dict[str, Any]],
@@ -990,6 +1022,7 @@ def create_app(args: argparse.Namespace) -> FastAPI:
             already_interpolated: bool = False,
         ) -> int:
             nonlocal frames_out
+            from xvideo.serving.presentation_pipeline import finish_thread
             if not encoded_frames:
                 return 0
 
@@ -1013,10 +1046,31 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                 encoded_frames = await asyncio.to_thread(
                     runtime.run_presentation, app.state.upscaler.encode_frames, encoded_frames, output_quality, profile)
             elif app.state.upscaler is not None:
-                encoded_frames = await asyncio.to_thread(
-                    runtime.run_presentation, app.state.upscaler.process, encoded_frames, profile, output_quality)
+                encoded_frames = await finish_thread(
+                    runtime.run_presentation, app.state.upscaler.process, encoded_frames, profile, output_quality,
+                    defer_preview=independent_preview and h264_stream is None and rec_output is None)
             engine=profile.get('interpolation_backend','rife')
             profile['output_order'] = 'sr_nr_'+engine if after_enhancement else engine+'_sr_nr'
+            from xvideo.serving.preview_pipeline import DeferredPreview, LatestPreview
+            nonlocal preview_consumer
+            if isinstance(encoded_frames, DeferredPreview):
+                count = len(encoded_frames)
+                # Capture credit follows real presentation submission, independently
+                # of optional JPEG readback/encoding or browser rendering.
+                await _send_json({
+                    "type": "presentation_progress", "count": count,
+                    "source_seq": max((int(m.get("seq") or 0) for m in source_metas), default=0),
+                    "profile": profile,
+                })
+                if preview_consumer is None:
+                    preview_consumer = LatestPreview(_send_preview_frames)
+                preview_consumer.offer(encoded_frames, source_metas, profile, server_elapsed)
+                ws_debug["preview"] = preview_consumer.status()
+                return count
+            return await _send_preview_frames(encoded_frames, source_metas, profile, server_elapsed)
+
+        async def _send_preview_frames(encoded_frames, source_metas, profile, server_elapsed):
+            nonlocal frames_out
             count = len(encoded_frames)
             if not source_metas:
                 source_metas = [{} for _ in range(count)]
@@ -1375,16 +1429,25 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                 print(f"#####[WS-GUARD] session close failed reason={reason}: {exc!r}", flush=True)
 
         async def _stop_output_task() -> None:
-            nonlocal output_task
+            nonlocal output_task, preview_consumer
             stop_output_pump.set()
             if output_task is not None:
                 try:
-                    await asyncio.wait_for(output_task, timeout=1.0)
+                    await asyncio.wait_for(asyncio.shield(output_task), timeout=1.0)
                 except asyncio.TimeoutError:
                     output_task.cancel()
+                    try:
+                        await output_task
+                    except asyncio.CancelledError:
+                        pass
                 except Exception:
                     pass
             output_task = None
+            if preview_consumer is not None:
+                try:
+                    await preview_consumer.close()
+                finally:
+                    preview_consumer = None
 
         def _start_recorders() -> None:
             nonlocal rec_input, rec_output, rec_seq, rec_base
@@ -1591,10 +1654,22 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                         _up_allow = args.uplink_codec == "auto" and not lossless_mode
                         _dn_allow = args.downlink_codec == "auto" and not lossless_mode
                         output_codec = "h264" if payload.get("output_codec", "h264") == "h264" and _dn_allow else "mjpeg"
+                        independent_preview = payload.get("independent_preview") is True
                         if app.state.upscaler is not None:
                             output_codec = "mjpeg"
                         h264_stream = _H264Stream(output_quality) if output_codec == "h264" else None
                         input_codec = "h264" if payload.get("input_codec", "h264") == "h264" and _up_allow else "mjpeg"
+                        if spout_input is not None:
+                            await asyncio.to_thread(spout_input.close)
+                            spout_input = None
+                            app.state.spout_input = None
+                        if payload.get("input_codec") == "spout":
+                            factory = getattr(app.state, "spout_input_factory", None)
+                            if factory is None or payload.get("gate_enabled") or payload.get("use_pe") or lossless_mode:
+                                raise ValueError("Spout input requires the configured local shader preset")
+                            spout_input = await asyncio.to_thread(factory)
+                            app.state.spout_input = spout_input
+                            input_codec = "spout"
                         h264_ingest = _H264Ingest() if input_codec == "h264" else None
                         input_sniffed = False
                         if app.state.runtime is not None:
@@ -1750,6 +1825,7 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                                 "width": session_settings.width,
                                 "output_codec": output_codec,
                                 "input_codec": input_codec,
+                                "input_source": spout_input.source if spout_input else None,
                                 "ref_image": ref_image is not None,
                                 "kv_reset_frames": kv_reset_frames,
                                 "use_pe": use_pe,
@@ -1845,12 +1921,11 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                             "up_ms": None if _up_ms is None else round(_up_ms, 1),
                         })
                         continue
-                    elif msg_type == "set_strength":
+                    elif msg_type in ("set_strength", "set_shader_overlay"):
                         try:
                             if session is None:
                                 raise ValueError('no active session')
-                            state = app.state.shader_strength.set(payload.get('value'), mode=payload.get('mode'))
-                            await _send_json({'type': 'strength_queued', 'strength': state})
+                            shader_controls.submit(msg_type, payload)
                         except ValueError as exc:
                             await _send_json({'type': 'strength_error', 'message': str(exc)})
                         continue
@@ -1864,11 +1939,37 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                             scene_serial += 1
                             prepared_scene = None
                             bridge = app.state.shader_bridges.get(payload.get('live_shader_token'))
+                            if spout_input is not None:
+                                from .spout_input import SpoutShaderBridge
+                                if spout_bridge is not None:
+                                    try:
+                                        await asyncio.to_thread(spout_bridge.close)
+                                    except Exception as exc:
+                                        # Retain ownership and the current scene if an old
+                                        # receiver has not stopped; do not allocate another.
+                                        ws_debug["scene_bridge_error"] = str(exc)
+                                        await _send_json({"type": "scene_error", "message":
+                                            f"Previous scene preview could not stop: {exc}"})
+                                        continue
+                                    spout_bridge = None
+                                try:
+                                    spout_bridge = await asyncio.to_thread(SpoutShaderBridge,
+                                        spout_input.source, spout_input.device)
+                                    ws_debug["scene_bridge_error"] = None
+                                except Exception as exc:
+                                    # This extra receiver only animates the transition.
+                                    # D3D allocation/capture failure must not kill the
+                                    # healthy model input or its WebSocket session.
+                                    ws_debug["scene_bridge_error"] = str(exc)
+                                    ws_debug["scene_bridge_fallbacks"] = ws_debug.get("scene_bridge_fallbacks", 0) + 1
+                                    print(f"#####[SCENE] moving shader preview unavailable; "
+                                          f"using current source frame: {exc!r}", flush=True)
+                                bridge = spout_bridge
                             live_scene_transition = bridge is not None and bridge.latest() is not None
                             if app.state.upscaler is not None and app.state.upscaler.direct_requested:
                                 app.state.upscaler.begin_transition(
                                     (lambda bridge=bridge: bridge.latest()) if live_scene_transition else
-                                    (lambda: getattr(session, "_latest_source_frame", None)),
+                                    (lambda session_ref=session: getattr(session_ref, "_latest_source_frame", None)),
                                     moving=live_scene_transition)
                             scene_task = asyncio.create_task(_prepare_scene(session, prompt, scene_serial))
                         continue
@@ -1989,7 +2090,14 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                 _prof_on = session_settings is not None and session_settings.profile_timings
 
                 def _run_frame():
-                    if uplink_frame is not None:
+                    if spout_input is not None:
+                        if frame_bytes != b"SPT1":
+                            raise ValueError("Spout input accepts only a capture-credit token")
+                        frame = capture_model_input(spout_input, session.settings.width, session.settings.height)
+                        frame_meta["t_capture_ms"] = spout_input.metrics["last_frame_at"] * 1000
+                        frame_meta["spout_frame"] = spout_input.metrics["frame_number"]
+                        ws_debug["input_transport"] = spout_input.status()
+                    elif uplink_frame is not None:
                         frame = uplink_frame
                     elif _prof_on:
                         _dec_t0 = time.perf_counter()
@@ -2179,17 +2287,20 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                 push_timeout = max(0.1, float(args.push_frame_timeout_s))
                 if not session.initialized:
                     push_timeout = max(push_timeout, float(args.first_frame_timeout_s))
+                push_started = time.monotonic()
                 try:
-                    chunk_results = await asyncio.wait_for(
-                        asyncio.to_thread(_run_frame),
-                        timeout=push_timeout,
-                    )
-                except asyncio.TimeoutError:
+                    chunk_results = await run_frame_with_deadline(_run_frame, push_timeout)
+                except FrameDeadlineExceeded:
                     msg = f"push_frame timeout after {push_timeout:.1f}s"
+                    ws_debug['frame_failure'] = dict(kind='submission_deadline',
+                        elapsed_s=time.monotonic()-push_started, message=msg)
                     print(f"#####[WS-GUARD] {msg}", flush=True)
                     await _send_json({"type": "error", "message": msg})
                     break
                 except Exception as exc:
+                    ws_debug['frame_failure'] = dict(kind='frame_worker',
+                        elapsed_s=time.monotonic()-push_started, message=repr(exc))
+                    print(f"#####[WS-GUARD] frame worker failed: {exc!r}", flush=True)
                     await _send_json({"type": "error", "message": repr(exc)})
                     break
                 if isinstance(chunk_results, tuple) and chunk_results and isinstance(chunk_results[0], str):
@@ -2308,6 +2419,7 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                 raise
         finally:
             try:
+                await shader_controls.close()
                 if scene_task is not None:
                     try:
                         await scene_task
@@ -2325,6 +2437,12 @@ def create_app(args: argparse.Namespace) -> FastAPI:
                 ws_debug["closed_at"] = time.time()
                 ws_debug["send_state"] = "closed"
             finally:
+                if spout_bridge is not None:
+                    await asyncio.to_thread(spout_bridge.close)
+                if spout_input is not None:
+                    await asyncio.to_thread(spout_input.close)
+                    if getattr(app.state, "spout_input", None) is spout_input:
+                        app.state.spout_input = None
                 if ticket is not None:
                     app.state.session_gate.release(ticket)
 

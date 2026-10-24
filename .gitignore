@@ -32,9 +32,11 @@ tulip/research/Real-ESRGAN/
 # Machine-local launch preferences, read on each SDK/supervisor restart.
 tulip/runtime-settings.json
 tulip/performance-settings.json
+tulip/vfx-runtime.json
 
 # Isolated vendor VFX package used for local benchmarks.
 tulip/research/vfx-probe/
+tulip/research/vfx-0.2.0.0/
 
 # Local restore points include private prompts and machine settings.
 tulip/favorites/

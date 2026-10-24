@@ -10,6 +10,8 @@ from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "deploy"))
+from xvideo.serving.windows_priority import configure_delivery_priority
+print(json.dumps({"deliveryPriority": configure_delivery_priority()}), flush=True)
 parser = argparse.ArgumentParser()
 parser.add_argument("--port", type=int, default=7873)
 options = parser.parse_args()
@@ -54,8 +56,16 @@ args = build_parser().parse_args([
     "--prompt", preset["prompt"],
 ])
 app = create_app(args)
+from xvideo.serving.spout_input import SpoutInput, load_input_config
+def create_spout_input():
+    config = load_input_config()
+    if config.get("transport") != "spout":
+        raise ValueError("Spout input is not enabled")
+    return SpoutInput(config["source"], config["device"])
+app.state.spout_input_factory = create_spout_input
 from xvideo.serving.shader_strength import ShaderStrength, load_strength_config
-app.state.shader_strength = ShaderStrength(**load_strength_config(ROOT / 'tulip/shader-strength.json'))
+app.state.shader_strength = ShaderStrength(**load_strength_config(ROOT / 'tulip/shader-strength.json'),
+                                           config_path=ROOT / 'tulip/shader-strength.json')
 from xvideo.serving.cache_decay import CacheDecay, load_decay_config
 app.state.cache_decay = CacheDecay(**load_decay_config(ROOT / 'tulip/cache-decay.json'),
                                    native_fps=native_quality['fps'])
@@ -92,6 +102,7 @@ class LocalPreset:
                 except (ValueError, TypeError):
                     return message
                 if isinstance(payload, dict) and payload.get("type") == "start":
+                    spout_requested = payload.get("spout_input") is True
                     # Configuration changes take effect only at an explicit new
                     # session. The single-session service keeps weights resident.
                     updated = load_native_config()
@@ -99,6 +110,8 @@ class LocalPreset:
                     args.width, args.height, args.fps = updated['width'], updated['height'], updated['fps']
                     preset['start'].update({k: updated[k] for k in ('width', 'height', 'fps')})
                     payload = {**preset["start"], "prompt": str(payload.get("prompt") or preset["prompt"])[:12000],
+                               "input_codec": "spout" if spout_requested and load_input_config().get("transport") == "spout" else "mjpeg",
+                               "independent_preview": payload.get("independent_preview") is True,
                                "profile_timings": False,
                                "scene_token": payload.get("scene_token"),
                                "ref_image": payload.get("ref_image") if isinstance(payload.get("ref_image"), str) and len(payload["ref_image"]) <= 4 * 1024 * 1024 else None,

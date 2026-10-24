@@ -62,6 +62,11 @@ def pace(source, sink, report, fps, capacity=12, prefill=8):
 
 
 if __name__=='__main__':
+    if __package__:
+        from .windows_priority import configure_delivery_priority
+    else:
+        from windows_priority import configure_delivery_priority
+    priority = configure_delivery_priority()
     pace(sys.stdin.buffer,sys.stdout.buffer,
-         lambda state:print(json.dumps(state,separators=(',',':')),file=sys.stderr,flush=True),
+         lambda state:print(json.dumps({**state, 'delivery_priority': priority},separators=(',',':')),file=sys.stderr,flush=True),
          float(sys.argv[1]))

@@ -1,0 +1,1627 @@
+{
+  "repo": "joyai-video-edit",
+  "commit": "1c35311db9690eb02e16a41d5cd71e527c021de4",
+  "branch": "tulip-streaming",
+  "files": [
+    {
+      "path": ".gitignore",
+      "size": 1501,
+      "sha256": "b77a890ef018d826d2d4771dd8d173acc289ec5a7ed61fad0807c9b84c40b74e"
+    },
+    {
+      "path": "DEPLOYMENT.md",
+      "size": 15409,
+      "sha256": "42e390819649ebac5ac33fa9b131275ce1ed61f88ed6aee66510ae2b50137f31"
+    },
+    {
+      "path": "LICENSE",
+      "size": 11558,
+      "sha256": "1eb85fc97224598dad1852b5d6483bbcf0aa8608790dcc657a5a2a761ae9c8c6"
+    },
+    {
+      "path": "README.md",
+      "size": 10285,
+      "sha256": "93d79f8698f8ac2fdc9504453fac8aaf15b5238a6b5767b1123a974b3c05b204"
+    },
+    {
+      "path": "assets/live_demo/live_cartoon_group.jpg",
+      "size": 209773,
+      "sha256": "43851035648f559a72a55cac11d4b8ea693122a767b45ac0f3f833d1c9fe2a07"
+    },
+    {
+      "path": "assets/live_demo/live_cel_anime.jpg",
+      "size": 223370,
+      "sha256": "f3f1f3665fe1464330f3cb77fc23e6281cad25c9fcb83acfa248ba2232010540"
+    },
+    {
+      "path": "assets/live_demo/live_gundam.jpg",
+      "size": 183372,
+      "sha256": "978dc97f200433cedbfc3847b536137c12cf8cfae6e0a144cb5d4b0f9753bd0c"
+    },
+    {
+      "path": "assets/live_demo/live_hanfu_palace.jpg",
+      "size": 220946,
+      "sha256": "29c48947f3eca8248fbe2a8baa2bde86f3bc4577556400c5f688ba6a7faee42b"
+    },
+    {
+      "path": "assets/live_demo/live_optimus_prime.jpg",
+      "size": 199206,
+      "sha256": "4983240c70a826e181c15491769cf6918349854c92654cdb2920e57d1588382f"
+    },
+    {
+      "path": "assets/teaser.jpg",
+      "size": 2283695,
+      "sha256": "cb86b1627edec1172cf98d3745fea79f22bb0ca7ed7bf12cafc8a2e66fdd6d2b"
+    },
+    {
+      "path": "deploy/joyomni_ops/.gitignore",
+      "size": 64,
+      "sha256": "2d80afc4c651d545c1096adf0caf54d656ddda5fefc3d586fede47357414d326"
+    },
+    {
+      "path": "deploy/joyomni_ops/LICENSE",
+      "size": 11560,
+      "sha256": "3ddf9be5c28fe27dad143a5dc76eea25222ad1dd68934a047064e56ed2fa40c5"
+    },
+    {
+      "path": "deploy/joyomni_ops/README.md",
+      "size": 3767,
+      "sha256": "298732462e25dfe8ed32fa80b864bfc3ae24118c0a83585a4c6a519754ad51bf"
+    },
+    {
+      "path": "deploy/joyomni_ops/csrc/fp8_gemm.cu",
+      "size": 58156,
+      "sha256": "68fb56fc28e888a5a11deb6a4db293dc8a251bdf23b35c0d9e3f4a57e15acff3"
+    },
+    {
+      "path": "deploy/joyomni_ops/csrc/fused_norm_scale_shift.cu",
+      "size": 9349,
+      "sha256": "54a2375c0d7047091e72efdfc2300102d413dd1134875c32ead31ce9d713e859"
+    },
+    {
+      "path": "deploy/joyomni_ops/csrc/fused_qknorm_rope_3d_kernel.cu",
+      "size": 8323,
+      "sha256": "01c3de42d4f8117d6db97026464570b26981229bc0ba01d9ddd71c83f463751f"
+    },
+    {
+      "path": "deploy/joyomni_ops/csrc/per_token_quant_fp8.cu",
+      "size": 6871,
+      "sha256": "70bb5caeb39cc10e35e16d4159cbaf6a426645af4b8d0fb2be175eee3d8837a6"
+    },
+    {
+      "path": "deploy/joyomni_ops/csrc/pybind.cpp",
+      "size": 2860,
+      "sha256": "034d6af7686db376860abeb470103a182d375382d8d45ab060c32952267bc650"
+    },
+    {
+      "path": "deploy/joyomni_ops/csrc/rmsnorm.cu",
+      "size": 3186,
+      "sha256": "039fba8e7867f888547cf2f4d23c80c43344fc2f59634dadd5d99dd46fb12885"
+    },
+    {
+      "path": "deploy/joyomni_ops/include/joyomni_ops.h",
+      "size": 998,
+      "sha256": "d81a84efe6ddcba549d0e4e72c36cc69989c819debddf4ccc535af4a5fb02d45"
+    },
+    {
+      "path": "deploy/joyomni_ops/include/math.hpp",
+      "size": 813,
+      "sha256": "fea32eb3a851478fa9f457f4091bd397f6442ce30eee8bbe8d6247845c2c2e11"
+    },
+    {
+      "path": "deploy/joyomni_ops/joyomni_ops/__init__.py",
+      "size": 2118,
+      "sha256": "8e5f565a7426bcdfea4863e64563d9742dc9a0202ed4970e5af9133ee12df8e1"
+    },
+    {
+      "path": "deploy/joyomni_ops/setup.py",
+      "size": 5184,
+      "sha256": "9ae9fb0ca8e29998c7ab3c7f3dd9eadd11ac7534f3319260047a9bfe5196318d"
+    },
+    {
+      "path": "deploy/joyomni_ops/tests/test_bench.py",
+      "size": 8553,
+      "sha256": "87ba2db98f54901a1a7a15d76bbc514cf42c8cfff7aaddb14bc0aaee82be3fab"
+    },
+    {
+      "path": "deploy/joyomni_ops/tests/test_parity_light.py",
+      "size": 3931,
+      "sha256": "6b2205800723f157f98c1926bb982265d517dc77ec06b7296ef0b2e4ea36f993"
+    },
+    {
+      "path": "deploy/requirements.txt",
+      "size": 402,
+      "sha256": "5ac867defd163d2cb9a97471875adaf236a41f10cf509901b5db4242750ea769"
+    },
+    {
+      "path": "deploy/run_server.sh",
+      "size": 2883,
+      "sha256": "e2a521d93673e3b6a49f05b169aee90eab234505a67d393af44c5bfd7d31c887"
+    },
+    {
+      "path": "deploy/rv2v_reference/1c182f2f-32cf-4825-904e-64c69aed2e31.png",
+      "size": 1127047,
+      "sha256": "ba4e66af6d9cf113811af0e912f530846a33cbad5f3ed741fe8be17eaf9cd13b"
+    },
+    {
+      "path": "deploy/rv2v_reference/486b9561-e73d-45ca-bb2d-2a47998a0a73.png",
+      "size": 223380,
+      "sha256": "02f6a73fda155bd9e0d4b96cceec6e788bb29c6ebc370be604e4d75338aa6d5a"
+    },
+    {
+      "path": "deploy/rv2v_reference/4e481f7a-2443-4935-a841-af6113cc4236.png",
+      "size": 378540,
+      "sha256": "871a5121a02c9406f4b0d8d6f70a7a2886e4168d8ecaf1bb7b7457cd8bb76bed"
+    },
+    {
+      "path": "deploy/rv2v_reference/5e178546-3ebf-40df-bb86-01613dd96c3b.png",
+      "size": 147723,
+      "sha256": "00be932e392002afa423bcc555e174ee57118f37f0e034f7ca48edd4dffb06fe"
+    },
+    {
+      "path": "deploy/rv2v_reference/nailong.png",
+      "size": 228189,
+      "sha256": "d1a609f8c0fc7db1c3798857a6d55615925305abcdc1b6fc876b0e3a0816a931"
+    },
+    {
+      "path": "deploy/static/index.html",
+      "size": 121270,
+      "sha256": "4d03689cc455fbde5eb253f6983ff2343aa0d4f50a543c3effeab42f426c4bf2"
+    },
+    {
+      "path": "deploy/xvideo/__init__.py",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "deploy/xvideo/config.py",
+      "size": 9122,
+      "sha256": "17d70d3bb3f7f2dab95a478e7e5de6b25a13a3b2d0cfd9f40981aecba0b1476c"
+    },
+    {
+      "path": "deploy/xvideo/inductor_autotune_fix.py",
+      "size": 6961,
+      "sha256": "fb5943fcec6bc0edac296bebec31c1e9a88d3b9c75bb3c247cde9603d6424c46"
+    },
+    {
+      "path": "deploy/xvideo/lowvram.py",
+      "size": 2895,
+      "sha256": "4cedc23e58c039d19e925e6e27c29473d96fd58341cef00344022396a7a4c0b3"
+    },
+    {
+      "path": "deploy/xvideo/models/__init__.py",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "deploy/xvideo/models/dit/__init__.py",
+      "size": 105,
+      "sha256": "44b09d31551a0b0c8f946922ab25fc625948c1191940f436ae0fd41f41ec5957"
+    },
+    {
+      "path": "deploy/xvideo/models/dit/dit.py",
+      "size": 42226,
+      "sha256": "4bc0a251ec268ccc3ac61f5db85dc543a32322eeb387358a777f49dcf0370f48"
+    },
+    {
+      "path": "deploy/xvideo/models/dit/fp8_linear.py",
+      "size": 8045,
+      "sha256": "8e526dcf841b38bcd27013630f5682141c349cd1d16c8cdf61f06c1431a24432"
+    },
+    {
+      "path": "deploy/xvideo/models/dit/fp8_prefix.py",
+      "size": 3497,
+      "sha256": "1dcdd179ef73b4ce62083049551c33949500bc28780d6ca9754355bfa0415b41"
+    },
+    {
+      "path": "deploy/xvideo/models/dit/prefix_attention.py",
+      "size": 3802,
+      "sha256": "0865f2b56ef53ff0989cbda31dc4773f44f9bd6891504b93931e4926e16c0279"
+    },
+    {
+      "path": "deploy/xvideo/models/dit/prompt_mask.py",
+      "size": 1039,
+      "sha256": "f0ddd8f0925fe9f82b0196cc2d24b8c74443e93c67e422eaab6dfd14c504b558"
+    },
+    {
+      "path": "deploy/xvideo/models/dit/rope.py",
+      "size": 1783,
+      "sha256": "2ae4f692969aa4a43970046941ec02ad4c54c817f35a4052624b43c184dd3fcc"
+    },
+    {
+      "path": "deploy/xvideo/models/dit/sgl_fused_ops.py",
+      "size": 3585,
+      "sha256": "467ce964302e5753ce57a5b597e9f0c9f8c1dbee16033b14310e7fd1a5758bdd"
+    },
+    {
+      "path": "deploy/xvideo/models/models.py",
+      "size": 8372,
+      "sha256": "2ba2a17114ca48d01d0496d0fa93313437d3c6f8ddc9b91df7115d518c1c9316"
+    },
+    {
+      "path": "deploy/xvideo/models/pipeline.py",
+      "size": 22416,
+      "sha256": "0a1a8006b523d95ed734f533db434aa6a1d444035edc8ce0d48b13b75bf16d53"
+    },
+    {
+      "path": "deploy/xvideo/models/scheduler.py",
+      "size": 3939,
+      "sha256": "704106669a5ea014422e61c3324667fd048ef83ca40e64f92e526c539f2bcf11"
+    },
+    {
+      "path": "deploy/xvideo/models/vae/__init__.py",
+      "size": 51,
+      "sha256": "c4f2a9c263020c5d53ac9602d52a1463f717ba2b1a69db194d82dfc27696f674"
+    },
+    {
+      "path": "deploy/xvideo/models/vae/vae.py",
+      "size": 26785,
+      "sha256": "6f6291e1723efcb0a58644ddfdbcec6562466b8c5673c7fd5ba7fe60803a6916"
+    },
+    {
+      "path": "deploy/xvideo/models/vae/vae_compile.py",
+      "size": 8149,
+      "sha256": "ef0b1a8eec2fd50dd8958404c36bf367ee658a87e6d939ec1ef07e8980d7a9ba"
+    },
+    {
+      "path": "deploy/xvideo/serving/__init__.py",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "deploy/xvideo/serving/cache_decay.py",
+      "size": 5373,
+      "sha256": "3ac67c4ce9e5527ad0d946b7d430e93caab9ceecf622b4eff78364a15645aea9"
+    },
+    {
+      "path": "deploy/xvideo/serving/direct_ndi_output.py",
+      "size": 14180,
+      "sha256": "b009f365c5977b80118dbdc6a60dc05dc16a2f8b8b2b9c3fad0dd51c15af9c78"
+    },
+    {
+      "path": "deploy/xvideo/serving/encoded_pacer.py",
+      "size": 2663,
+      "sha256": "0fc532a408d0f21afb0fa507e519e7e04c9ea0b2e3441aafaf459c116ad49976"
+    },
+    {
+      "path": "deploy/xvideo/serving/encoder_status.py",
+      "size": 955,
+      "sha256": "3d876dc84205d2486b3881003d931bf456c0a7876dcc34c637923656cbf9e8ad"
+    },
+    {
+      "path": "deploy/xvideo/serving/gpu_video_output.py",
+      "size": 18633,
+      "sha256": "8f0c2268c81c346f485dccf50c7a1b4007cc70e98d487880637454f56ded82c4"
+    },
+    {
+      "path": "deploy/xvideo/serving/graph_runner.py",
+      "size": 16019,
+      "sha256": "fd136bd74adab0d0b6aece1a747ab4738507f09afaae1dbff34c5fe7990058a2"
+    },
+    {
+      "path": "deploy/xvideo/serving/history_noise.py",
+      "size": 5553,
+      "sha256": "ea27d1b48e2f51b2d88bd3bc5c860b25f35eda69d8f6e728cd59ef1fb1bbf3c6"
+    },
+    {
+      "path": "deploy/xvideo/serving/interpolation_output.py",
+      "size": 6866,
+      "sha256": "34c23d076520e2459e4c861748598c556c5fa7c08dfc05c54dad282aae359e91"
+    },
+    {
+      "path": "deploy/xvideo/serving/joyomni_streaming.py",
+      "size": 103674,
+      "sha256": "25b34b95d7aa3d492144065227c990a38e19012e5e95b7b11312a6eedda1a366"
+    },
+    {
+      "path": "deploy/xvideo/serving/live_shader_bridge.py",
+      "size": 1178,
+      "sha256": "3cb412d905652ce7e37b1a57b7e1e6d80425d20c7e12722b4bd2a558d3873fed"
+    },
+    {
+      "path": "deploy/xvideo/serving/memory_status.py",
+      "size": 2093,
+      "sha256": "9fa1bbb158727e2e2f1d5abb922a4277502454e9857d19c46a3beb91d90792b4"
+    },
+    {
+      "path": "deploy/xvideo/serving/motion_bridge.py",
+      "size": 1349,
+      "sha256": "a86c327285a08378dd7ab299735ecc3525af88ed274845e338d09c5adc598d1f"
+    },
+    {
+      "path": "deploy/xvideo/serving/native_capture.py",
+      "size": 6154,
+      "sha256": "032c5aa99ca68d73035dccb63ebb8d6c5d69fa861af7b165be51ce6e9ba0836c"
+    },
+    {
+      "path": "deploy/xvideo/serving/native_config.py",
+      "size": 1313,
+      "sha256": "b60c9f726f8ff7a6db293b58ffa549980cbc3af45553da727ce95b46f8c7cf07"
+    },
+    {
+      "path": "deploy/xvideo/serving/neural_rendering_output.py",
+      "size": 5657,
+      "sha256": "d1fc230cde9cceed104d65e7dbb1e0808601df1c6f566a38002686e5ea1083ee"
+    },
+    {
+      "path": "deploy/xvideo/serving/pe.py",
+      "size": 16334,
+      "sha256": "059e3a12d300c7131f827d4b38d30e2506b8dcaa116b5396a4a9b52621b4c4ae"
+    },
+    {
+      "path": "deploy/xvideo/serving/presentation_pipeline.py",
+      "size": 1036,
+      "sha256": "aaf965d9f59ce6f20006ac527dc300ba7be5010a0fe53b4b9a862eafcb986655"
+    },
+    {
+      "path": "deploy/xvideo/serving/rife_output.py",
+      "size": 7965,
+      "sha256": "f6bee9b9aa170aafb04c33a9f288058feb47d9c6d24e1bc250aedccd2036d16b"
+    },
+    {
+      "path": "deploy/xvideo/serving/serve_joyomni_streaming.py",
+      "size": 127547,
+      "sha256": "b7dfdc691d3bb41a683e502d623e006053eee88ad7f902f7a390bbd0f5303ae7"
+    },
+    {
+      "path": "deploy/xvideo/serving/session_watchdog.py",
+      "size": 1246,
+      "sha256": "8351842fc4de2edfc68678d684233f1c3dd386acda319b970f6f4b3923bc09d8"
+    },
+    {
+      "path": "deploy/xvideo/serving/shader_strength.py",
+      "size": 5888,
+      "sha256": "a796cb6d817c8d54405e4ad1ab8b542987dc45a2ceb96e8c5b2f072db5061c6c"
+    },
+    {
+      "path": "deploy/xvideo/serving/stage_timings.py",
+      "size": 3686,
+      "sha256": "ff72e99e9f59d50438cf71506fced2e9c509f65ec49fbfa5d0fd1d5c6f535523"
+    },
+    {
+      "path": "deploy/xvideo/serving/upscale_output.py",
+      "size": 29117,
+      "sha256": "2bfe5d5b5a4a7c68a8b71eff66908cba4b0c2db9ded0cd19eea0053889238797"
+    },
+    {
+      "path": "deploy/xvideo/serving/vsr_output.py",
+      "size": 4993,
+      "sha256": "27f692343d570640ab15f7549756cb59f8449e67f75e74e7e6574a34e63eb8d5"
+    },
+    {
+      "path": "deploy/xvideo/utils.py",
+      "size": 5198,
+      "sha256": "6a36de9c3a4af74e23dbb30ee9840b86cc5f12da6033c60ba52459521f53f6c4"
+    },
+    {
+      "path": "tulip/CACHE_AUDIT_20260924.md",
+      "size": 4714,
+      "sha256": "719c025486c473d30d18b0878b1d44ca467e925443862ad7cf9ec688e046fbe4"
+    },
+    {
+      "path": "tulip/CACHE_DECAY.md",
+      "size": 2870,
+      "sha256": "ee986e95817fc8b998b4f1dfbfe3d3cfa67e91055f83bd62a070db713366ff18"
+    },
+    {
+      "path": "tulip/CACHE_DIAGNOSTICS.md",
+      "size": 8340,
+      "sha256": "7014855017781684453ff03aa71984fc52df7d238c7b6bed2df5dd4b43c07caf"
+    },
+    {
+      "path": "tulip/CREATE_SCENE_CAPTURE_20260915.md",
+      "size": 2459,
+      "sha256": "afa87a43531e3b8bcdbe8835798984f44ef923f4af11da5ca9d1c24eeaeda31f"
+    },
+    {
+      "path": "tulip/DIRECT_NDI_OUTPUT.md",
+      "size": 10873,
+      "sha256": "6828206a228b244fb4e1fc5a79b5ec96272e174e6338923e2a6b2658e7cb188d"
+    },
+    {
+      "path": "tulip/DLSSG_GPU_COMPARISON_20260923.md",
+      "size": 7519,
+      "sha256": "3a38920e3f97f0aa6c64b57b916a9d08ecba54a1251fb90d3998503403bbee3f"
+    },
+    {
+      "path": "tulip/DLSSG_LIVE_20260924.md",
+      "size": 6320,
+      "sha256": "422f7ed94ae54a09cf25f9629a3b3f65b607ecc19c15482e1e90fc19c177e16e"
+    },
+    {
+      "path": "tulip/DLSSG_RIFE_COMPARISON_20260923.md",
+      "size": 5086,
+      "sha256": "f85a1e1711edb9d9a9e5ceb025a82c9064f08524eadf0cf83db57fc632683604"
+    },
+    {
+      "path": "tulip/FIXED_PROMPT_GRAPH.md",
+      "size": 4896,
+      "sha256": "b08e906d4bb50118c12b4492740ddcdccd5f726959d969679f388c0335194b96"
+    },
+    {
+      "path": "tulip/GENERATED_SCENE_HANDOFF_20260925.md",
+      "size": 7689,
+      "sha256": "4ee02c1fabe2422e93d66c61d09801894e0221a3e4fed140eb4b9a9b8040430b"
+    },
+    {
+      "path": "tulip/GENERATION_STAGES_20260923.md",
+      "size": 7378,
+      "sha256": "175f63c7a39ccb455baaf7a65a6aa95dc3ab9fea3e24ed73c7c6ecd9c2a84fcb"
+    },
+    {
+      "path": "tulip/GPU_OPTIMIZATION_20260922.md",
+      "size": 9110,
+      "sha256": "b94b06a37b1668b820401eb786e70c070fe4314b95e556bdbc4e122a31cd5809"
+    },
+    {
+      "path": "tulip/GPU_VIDEO_JITTER_20260915.md",
+      "size": 6055,
+      "sha256": "a14dcd276c3ae2a98803ca3d5146d370c995c6b8a8c152dba1bd8854c177d930"
+    },
+    {
+      "path": "tulip/GPU_VIDEO_OUTPUT_20260915.md",
+      "size": 5398,
+      "sha256": "2653df89c946cb14e9331d115a81478e15f1e211ca1e344998c68ce1e8fe2aa8"
+    },
+    {
+      "path": "tulip/GPU_VIDEO_QUALITY_20260915.md",
+      "size": 4557,
+      "sha256": "02f8081e29508a23cb6990b19af7fad41f694d324bf141bb11cb90551ef32d92"
+    },
+    {
+      "path": "tulip/HISTORY_NOISE.md",
+      "size": 4970,
+      "sha256": "eee5919c6c0885132fc1499ac321f984d9fda7e46a160db32a7633786c4cc400"
+    },
+    {
+      "path": "tulip/JITTER_FIX_20260915.md",
+      "size": 4415,
+      "sha256": "2443f4dd3cc03ee3ee552c5517873bb3f2a2f6b732c586c58f44b82ae74347f5"
+    },
+    {
+      "path": "tulip/LIVE_SHADER_BRIDGE_20260915.md",
+      "size": 4055,
+      "sha256": "bd799c5feda923faeb7413a945ca302f8f2415f8a3b22917b2714369adaa571d"
+    },
+    {
+      "path": "tulip/LIVE_SHOW_AB_20260924.md",
+      "size": 2635,
+      "sha256": "e38c6ee62a1dd558d591f7c691aeb4f7c41cb2658ab24d99f674d7ddd694f14d"
+    },
+    {
+      "path": "tulip/NATIVE600_TRIAL_20260922.md",
+      "size": 7727,
+      "sha256": "89f834fbe3ff12515d70abd115d62649a95b027a8b1d05524761e9989d68a3dd"
+    },
+    {
+      "path": "tulip/NATIVE648_RETURN_20260923.md",
+      "size": 3511,
+      "sha256": "006489989f5ed25e873fd54c29ec6adbb9c2c4e956f42b0fd49138b3ffa27915"
+    },
+    {
+      "path": "tulip/NATIVE648_TRIAL_20260922.md",
+      "size": 3484,
+      "sha256": "e1aa0eaf0c1329283babe31dca1923267dba68fd7c9e7964d3b6a039ddcbd7d1"
+    },
+    {
+      "path": "tulip/NATIVE720_VSR_TRIAL_20260922.md",
+      "size": 14126,
+      "sha256": "006b9d62e6cbf8ea2acd14998a40cd92c418d45e423c31d5b431c435473e7e1b"
+    },
+    {
+      "path": "tulip/NATIVE_QUALITY_20260917.md",
+      "size": 14487,
+      "sha256": "f4dce381f23f13bcc2e8ac68016a9e709bd205a0e49d555e879f14482c03a13b"
+    },
+    {
+      "path": "tulip/NEURAL_RENDERING_LIVE.md",
+      "size": 4624,
+      "sha256": "ad9e887dc4a3446db70ae463c7e862dc9dfefdfdd0d25f4e22e3433e8175a9ab"
+    },
+    {
+      "path": "tulip/OUTPUT_1440_TRIAL_20260915.md",
+      "size": 3534,
+      "sha256": "be9c4420311d3db3c720c8bd2b57ee53aefb41597cec21921cef3a7661411e4e"
+    },
+    {
+      "path": "tulip/OUTPUT_4K_LIVE_20260924.md",
+      "size": 2864,
+      "sha256": "7892ef0042cca75ef882bbb4d6921bbb2d02444a601ae229298bbaa3514f4ded"
+    },
+    {
+      "path": "tulip/OUTPUT_RESOLUTION.md",
+      "size": 3445,
+      "sha256": "c4d96f55dd8dbf3d98399df6b1a07e115772c511d08207d7451f04f2ba7cfde7"
+    },
+    {
+      "path": "tulip/PADDED_TEXT_OPTIMIZATION_20260923.md",
+      "size": 8335,
+      "sha256": "412f2f52724ca0ab651311e0e513da8e3b7b15afc6f819f67e82310e9c31fbe7"
+    },
+    {
+      "path": "tulip/PREFIX_ATTENTION_20260918.md",
+      "size": 4444,
+      "sha256": "74e3f44d27388f74b60d90a15dbae5f20273b772bebd9eda74d17c5a9cbecfd7"
+    },
+    {
+      "path": "tulip/PREVIEW_LATENCY_20260923.md",
+      "size": 6344,
+      "sha256": "9d911bdb7d7df71f19334e18bfbc5a2b3a33f068f99df9330c3b85b8cc0cfcba"
+    },
+    {
+      "path": "tulip/PROGRESSIVE_DELIVERY_20260915.md",
+      "size": 3136,
+      "sha256": "2aef106e7a2cb3e292df457d11b05c7d5916f073654148d5ca68e01e50274c51"
+    },
+    {
+      "path": "tulip/PROMPTING_AUDIT_20260916.md",
+      "size": 4380,
+      "sha256": "347e0c6b6850127086f43b4e154bb1caf13e0cb81a1ef27689bd725b74c2662a"
+    },
+    {
+      "path": "tulip/PROMPT_UPDATE_JITTER_20260915.md",
+      "size": 3149,
+      "sha256": "56127165ae8793166234416627052d5e9b7f7038df63acbfce85765c3ebb6aed"
+    },
+    {
+      "path": "tulip/README.md",
+      "size": 13336,
+      "sha256": "e703388022e1a850fa2d132d0a557d0a3f0b01af344603d5fab35dc75139235d"
+    },
+    {
+      "path": "tulip/REFERENCE_TRIAL_20260915.md",
+      "size": 2220,
+      "sha256": "cdf02b7a3fb6d12d2032eac0c8a0ec89f05e91dd950663aead7bd52dfc77fd1f"
+    },
+    {
+      "path": "tulip/RESIDENT_TEXT.md",
+      "size": 10003,
+      "sha256": "e04e8391762fa5e52dee21360b60f437ac1138b9aa7f9e8964393392da820022"
+    },
+    {
+      "path": "tulip/RIFE_GPU_LIVE_20260923.md",
+      "size": 4615,
+      "sha256": "e2daf94514c5824da1e4c48a70385af192e3b0acad8283158d67464b32f83cf5"
+    },
+    {
+      "path": "tulip/RIFE_SELECTED_20260924.md",
+      "size": 1304,
+      "sha256": "2b903291fd77370f261f7839609e0ecd402405f66e48c5ec5a81fb20e3319350"
+    },
+    {
+      "path": "tulip/ROBUST_PLAYBACK_20260918.md",
+      "size": 7571,
+      "sha256": "2d19193eb3fd7cd1fc2c74ba70275493febfa85d3b81d21189cb96463c8cd096"
+    },
+    {
+      "path": "tulip/SCENE_FLOW.md",
+      "size": 1172,
+      "sha256": "42c5f6d472175543b41a37d79088df4d315c0181605a547043b30904cf1505f8"
+    },
+    {
+      "path": "tulip/SESSION_AGING_FIX_20260916.md",
+      "size": 5903,
+      "sha256": "1925fda74fe53c1bb579de468fcc00b800cc0e5dc10102cef10eb6490605900f"
+    },
+    {
+      "path": "tulip/SHADER_STRENGTH.md",
+      "size": 16729,
+      "sha256": "c3ef3f5431464102e539a9cda087089d022cc20343f407a0a3f69a83eec613d0"
+    },
+    {
+      "path": "tulip/TRANSITIONS_RIFE.md",
+      "size": 2175,
+      "sha256": "49660cd5d3f3df23173c1fc7fec5429dd41cfd0972c84aa2955fd6c4d03923c6"
+    },
+    {
+      "path": "tulip/UPSCALING_LIVE.md",
+      "size": 11969,
+      "sha256": "d7ae0b21b27d813133cec60abc012597c00c6815e1c60d827a5dbb5542101868"
+    },
+    {
+      "path": "tulip/UPSCALING_TRIAL.md",
+      "size": 10657,
+      "sha256": "bcdad4c2e6e89ec60fca23c2a3b8ef78fe0bae703bdf876440dfc44b1a1985ab"
+    },
+    {
+      "path": "tulip/WEBRTC_RESTART_20260918.md",
+      "size": 6230,
+      "sha256": "1ecf1409af061ad138c81d685f3d88dc19e3914dfbd637cb094b58f88e5fe0bd"
+    },
+    {
+      "path": "tulip/benchmark_dlssg_gpu_pipeline.py",
+      "size": 7188,
+      "sha256": "971f1fd008224dedbb5634bfa7639040d10ea30dc104b478114aa6d449b2ff8c"
+    },
+    {
+      "path": "tulip/benchmark_fp8_launch.py",
+      "size": 9222,
+      "sha256": "56abd2a72a8e5a487757e06575e396e6033748e496e31dff750b86021573b0ef"
+    },
+    {
+      "path": "tulip/benchmark_fp8_prefix_block.py",
+      "size": 7156,
+      "sha256": "53009ba11ebc708274e05f20cb8496705c405523585f4d3337a04f5364048fa9"
+    },
+    {
+      "path": "tulip/benchmark_output_order.py",
+      "size": 2728,
+      "sha256": "48da82444f12c030e832b6ceed50f435b4f888026bbeb4fcae3d0ea1582d17f6"
+    },
+    {
+      "path": "tulip/benchmark_prompt_attention.py",
+      "size": 2853,
+      "sha256": "d6b1b42471033a65445bb56a7b460312acb10a29d4c8174a898bc26a01213b57"
+    },
+    {
+      "path": "tulip/benchmark_sr_graph.py",
+      "size": 2303,
+      "sha256": "8e57396af4a1db4108bb57a1f2dce561ed853a964c91c1b3fd3abc93ec69e183"
+    },
+    {
+      "path": "tulip/benchmark_streaming_window_lookup.py",
+      "size": 1183,
+      "sha256": "09f1f0e1700f26cac39ac55eaefc9f32eebbf6881d9bdefc82b316d582ef2ce9"
+    },
+    {
+      "path": "tulip/cache-audit-current.txt",
+      "size": 78,
+      "sha256": "cdc52a10199d171475eb8e45559c0b77a1f8d4a9221ef9a46893ba5854f2b535"
+    },
+    {
+      "path": "tulip/cache-decay.json",
+      "size": 42,
+      "sha256": "cf09cedaaded207967acfd3fee52f02c0094e7c146076d04a8fe6371f71dfe2d"
+    },
+    {
+      "path": "tulip/cache-fix-restart-current.txt",
+      "size": 84,
+      "sha256": "d57f05ecc3f51e28c1b34c30702ff6284757665c1dec448e144986b35d154f6d"
+    },
+    {
+      "path": "tulip/cache_ab.py",
+      "size": 9668,
+      "sha256": "9f5aefa7b8c081fadb12b94b32b29cb449de6a855569a555334a1c0e2e0678e8"
+    },
+    {
+      "path": "tulip/capture_live_interpolation.py",
+      "size": 3579,
+      "sha256": "97283cf55e89a1dbb6220d953c009495ea31a721aa3dffd3bfd2ec0b13caa4c5"
+    },
+    {
+      "path": "tulip/checkpoint_vsr_648.py",
+      "size": 2621,
+      "sha256": "c7521b5646da02bae18001dc864dde4b89fc7f4b4c4b9845a32e831056799b4d"
+    },
+    {
+      "path": "tulip/combined-strength-current.txt",
+      "size": 84,
+      "sha256": "923061655c7de41b4653f7046935dff75a4efb3e85c1610fa9a8939328e212e9"
+    },
+    {
+      "path": "tulip/compare_dlssg_rife.py",
+      "size": 11638,
+      "sha256": "5f8ba8a9a2bb0e68c86d6b40c63496be300b03de53ccd1ac7c9e84c07336354f"
+    },
+    {
+      "path": "tulip/compare_vsr.py",
+      "size": 3484,
+      "sha256": "97fd3b49606532356357819a87601e77c0ae3c25a77ba8700b40a08a816f4bcc"
+    },
+    {
+      "path": "tulip/continuous-scenes-current.txt",
+      "size": 86,
+      "sha256": "d4c0eebbe8c50585c2933ecba9de7233cf1348e893ececd715177cc4a6b0e99f"
+    },
+    {
+      "path": "tulip/deploy_4k_live.py",
+      "size": 3729,
+      "sha256": "7381f1c2f3181dce679b9590bb3454f397f695b58989647d27810d30abe93bde"
+    },
+    {
+      "path": "tulip/deploy_dlssg_live.py",
+      "size": 1813,
+      "sha256": "4c14953dcfa8b64811eeecec7c8e3ed96327718bf85bdcf78cf17ce8d35172c1"
+    },
+    {
+      "path": "tulip/deploy_fp8_prefix.py",
+      "size": 2343,
+      "sha256": "67e7a23f263e446a720c630ede304613b3cbbb3842cf3fbcfb3902392d56b83c"
+    },
+    {
+      "path": "tulip/deploy_reference_strength.py",
+      "size": 6440,
+      "sha256": "1c9fd4baaea01b79047e727bd0b5c0f4485bed41066001de7016901543c6cf8a"
+    },
+    {
+      "path": "tulip/deploy_rife_gpu.py",
+      "size": 2198,
+      "sha256": "15569b0119f5170783cbb727983424eb558e400a6e8a60c7135f015075c74b94"
+    },
+    {
+      "path": "tulip/dlssg_gpu_bridge.py",
+      "size": 3687,
+      "sha256": "45e982cd0b7142ec4a96454a6fb678c999523332307a62ad5f2c618d9ed58b2c"
+    },
+    {
+      "path": "tulip/dlssg_quality_suite.py",
+      "size": 8755,
+      "sha256": "6cd4ed7528fbf21833b939ae87a8c0fc7aba2270c891d2009cbe3090a76f54e2"
+    },
+    {
+      "path": "tulip/download-models.py",
+      "size": 4961,
+      "sha256": "23c4dc9e14cdafa36a8454b2e2fab335aadc526fed5f45d4cc1c30a6d2d7dae3"
+    },
+    {
+      "path": "tulip/drift-live-current.txt",
+      "size": 49,
+      "sha256": "a8fb9ffca3568fa4c924d4e7f05c2c15f751c6aa0ee108268a8eb7bf17bb931e"
+    },
+    {
+      "path": "tulip/drift-offline-current.txt",
+      "size": 43,
+      "sha256": "74e8f36b0392c6b226c51f4e1c30fa877c16ddc8ee67a1800fa99d0d361e4a7a"
+    },
+    {
+      "path": "tulip/drift_lab/analyze.py",
+      "size": 2869,
+      "sha256": "ef0ab628aafc42cdeffe4e1f52f0d47891cde19b6e6e34066f17445d00954fee"
+    },
+    {
+      "path": "tulip/drift_lab/dial_probe.py",
+      "size": 2180,
+      "sha256": "c4964dcda2c98854f1ff455ec9df54ae8aa3d748bd8240ef583900dc0b4c8c18"
+    },
+    {
+      "path": "tulip/drift_lab/dial_score.py",
+      "size": 3289,
+      "sha256": "3108656431eebafbd78866bdd98c1dc98a6b2a7b386e7fa66d7695aa99211059"
+    },
+    {
+      "path": "tulip/drift_lab/live_probe.py",
+      "size": 4400,
+      "sha256": "a7002cf6425751bdad2dca3cd78a9704a34a7f1c88e12f9db4f4af10d0c43b89"
+    },
+    {
+      "path": "tulip/drift_lab/metrics.py",
+      "size": 3593,
+      "sha256": "67a49f87679dffebcd870ace9f085a164802335c9fb91959bbe6c93053a6e9f0"
+    },
+    {
+      "path": "tulip/drift_lab/motion_probe.py",
+      "size": 2371,
+      "sha256": "a97a1b8a8271b7e9a40e31ed755125560117c6875df5938b7f71c7aa7b37b283"
+    },
+    {
+      "path": "tulip/drift_lab/replay.py",
+      "size": 18586,
+      "sha256": "72c0879f1bb82ebaa07c687472c0f8559faf8a00484fc909d8688e7225d62025"
+    },
+    {
+      "path": "tulip/drift_lab/scorecard.py",
+      "size": 1737,
+      "sha256": "7292550ca85cb2a8c1ec6bec8254f5c876991727201653086623f4bd33d7f552"
+    },
+    {
+      "path": "tulip/fetch-scope-research.py",
+      "size": 1980,
+      "sha256": "7ad0c4c5440697c54cf98d2c238805d6a8c5256e63532f69c716c81603e88cf5"
+    },
+    {
+      "path": "tulip/fixed-prompt-fp8-gpu-proof-20260915.json",
+      "size": 393,
+      "sha256": "651cde5ea9064cdb3f48388390a20dcfb4afbfe75ac297129114603ca64ec112"
+    },
+    {
+      "path": "tulip/fixed-prompt-gpu-proof-20260915.json",
+      "size": 390,
+      "sha256": "205a5afe4cc4007c7b6c8853510ab53a50dbb940f1611ffb9766e189967a3acd"
+    },
+    {
+      "path": "tulip/fixed-prompt-live-20260915.png",
+      "size": 762778,
+      "sha256": "86b104dbd559a5f7ef9be4975151b9dc6fc6592812e624e73788917c4617fc3f"
+    },
+    {
+      "path": "tulip/generated-handoff-current.txt",
+      "size": 84,
+      "sha256": "4e2fb0f7a226c60738cbe8910b5e93f830d4481ffd13bf87b8297551b9775d02"
+    },
+    {
+      "path": "tulip/gpu-color-validation.json",
+      "size": 1488,
+      "sha256": "324747e3e52fdbb52eb9492c911b6e7ab5aff168ef243f870a61badd93290c83"
+    },
+    {
+      "path": "tulip/gpu-publisher-validation.json",
+      "size": 216276,
+      "sha256": "be5363d6200d8a770cc3b1df7bb98dce426776d0855c6a9a2811ace949e8c804"
+    },
+    {
+      "path": "tulip/history-noise.json",
+      "size": 37,
+      "sha256": "7db35d43d2c8e60bbc2bda8ddfdaf4fc73673a03af490afe2cf200762f9fa52b"
+    },
+    {
+      "path": "tulip/implement_fixed_prompt_20260915.py",
+      "size": 6147,
+      "sha256": "feb53b59752a6af1b59c45d70693c2dfb23fc2747006ee52ca39323578d80dbc"
+    },
+    {
+      "path": "tulip/interpolation-settings.json",
+      "size": 27,
+      "sha256": "364480601b08ef9075e163b8b542ed3649e73bed74d503dfde45b3cd895f2b2b"
+    },
+    {
+      "path": "tulip/interpolation_quality_24.py",
+      "size": 13860,
+      "sha256": "33dcba66e24d0d82e5891d4e3d57f16667a15ef7a803ebd40494fab928cee3d2"
+    },
+    {
+      "path": "tulip/interpolation_quality_report.py",
+      "size": 8998,
+      "sha256": "d2e9ae366d275bcf02b0817afdf1b1d50616562c0672604260ac7227bb1c8e9b"
+    },
+    {
+      "path": "tulip/interpolation_receiver_eval.py",
+      "size": 5331,
+      "sha256": "475d84524f889fd745d4f9538ef92161cd4f4d32407be7f071d1c9fa1062321e"
+    },
+    {
+      "path": "tulip/jitter-current.txt",
+      "size": 76,
+      "sha256": "4c0d5dd02dfbd4f1e3010d77b3151279fcab0454e315acc69476367625939f6b"
+    },
+    {
+      "path": "tulip/live_show_interpolation_ab.py",
+      "size": 9364,
+      "sha256": "265248f649c761758239c13764e21aaa1aab0b0aad3b7741e127588f85857c1c"
+    },
+    {
+      "path": "tulip/make-control.py",
+      "size": 2960,
+      "sha256": "34a55568287e776b2156f7a5360a8faeb8055ddb725b34e8c8bb16dfb6609b9c"
+    },
+    {
+      "path": "tulip/manual-update-current.txt",
+      "size": 86,
+      "sha256": "69d5c7026decebcf53203c111715c6ce0b7ba7aac7103b9b2fe1e77afe694bbe"
+    },
+    {
+      "path": "tulip/masked-attention-probe-20260915.json",
+      "size": 530,
+      "sha256": "31a70146a89dc343bd204bace25cdb3d6a8967c6396ad60542b874dcbc9b8792"
+    },
+    {
+      "path": "tulip/measure_padded_prompt.cjs",
+      "size": 4315,
+      "sha256": "f7d12627a966c2c0fc42958b8299dc25af8d9b5fc8ab8336a44930a95b59815e"
+    },
+    {
+      "path": "tulip/models-manifest.json",
+      "size": 8057,
+      "sha256": "af34e6ff2172213ce510fdbb1469ca28771e6a63e8d2e7021ed0cdf051ba209e"
+    },
+    {
+      "path": "tulip/native-capture.json",
+      "size": 4,
+      "sha256": "e3566b3a06430868d71e9287dfd6c6c520a3da027aabea01951d407ee131dc2f"
+    },
+    {
+      "path": "tulip/native-probe.json",
+      "size": 415,
+      "sha256": "fb9f25295f119e567d3cd430c47491982530f698c87d174927bf9b98a8aa457d"
+    },
+    {
+      "path": "tulip/native-quality.json",
+      "size": 63,
+      "sha256": "694560ed12afd64eec2048d509c78311c3b9bf394ebd8bf8601da20156c2dba8"
+    },
+    {
+      "path": "tulip/native600_guard_trial.py",
+      "size": 3331,
+      "sha256": "fb127171a1db1d726c949355d12c89a3245bf04a31cfc33737efb71173e99d4a"
+    },
+    {
+      "path": "tulip/native600_resume.py",
+      "size": 2483,
+      "sha256": "497ce46c1bbeab6dc5f3a779de5cd0148a9b5dc678de9aead2cb077ff023d191"
+    },
+    {
+      "path": "tulip/native600_retry.py",
+      "size": 3429,
+      "sha256": "55bad8581b2a004793a81f49f45effae95e0eb8972183caa61e0c91ae38f571f"
+    },
+    {
+      "path": "tulip/native600_trial.py",
+      "size": 6217,
+      "sha256": "752182dc19186f92aa26c5765a07e5d01be5eba88e0a6d2d8389a46ea7abaca8"
+    },
+    {
+      "path": "tulip/native648_repair.py",
+      "size": 1512,
+      "sha256": "2a139c634bc1e5351258ff1076ed96ae4f8bb09d9919d267b96f71098ba1d108"
+    },
+    {
+      "path": "tulip/native648_resume.py",
+      "size": 2314,
+      "sha256": "b88f6bda5d7148baf2661ac97aec3c5c908ab27b6bc45ff5a483b0a886136435"
+    },
+    {
+      "path": "tulip/native648_trial.py",
+      "size": 2262,
+      "sha256": "565d87bc75bbed1b547fae56d061de4eb7d5e472548ed395482ef34c4756a9d6"
+    },
+    {
+      "path": "tulip/native720_cadence_trial.py",
+      "size": 1965,
+      "sha256": "6d71e8bcd40bdd8013f8edebb7df192afc4a362c281eddf2f9bf24670f5b31e8"
+    },
+    {
+      "path": "tulip/native720_split_encode.py",
+      "size": 3151,
+      "sha256": "95c555071cdf2f7f468f402a1f68b9885733a095109d1fa654cb1695a782435d"
+    },
+    {
+      "path": "tulip/native720_vsr_trial.py",
+      "size": 3513,
+      "sha256": "180fb0bb016d10b5e2a209c09728f2906d6a706d4d39619f1f3bd45b54332bdc"
+    },
+    {
+      "path": "tulip/neural-rendering.json",
+      "size": 167,
+      "sha256": "10fa30e2355c44d90584e1fed0d48c474851ec527841ea8b1c332e01b1ba4e5d"
+    },
+    {
+      "path": "tulip/observe_stage_timings.py",
+      "size": 4206,
+      "sha256": "2ba69adbc123c6e46017cd0459972e03c197f8dc2f380ff54ca8df0c6a5b5f0d"
+    },
+    {
+      "path": "tulip/output-presentation.json",
+      "size": 406,
+      "sha256": "ad7ddf1e722d350c8773d0021afee6dd6e4d58bb1afe126f8b69a54de9c5baad"
+    },
+    {
+      "path": "tulip/package-live-evidence.py",
+      "size": 2235,
+      "sha256": "dd66012bec37d32febf0e2ec51a8e0a7e26428405a703b463616222a6af32353"
+    },
+    {
+      "path": "tulip/packages.json",
+      "size": 3705,
+      "sha256": "71767ebb03fefa48f12cafa24ce87512a5c440630458466b5b50c8c0e40156d1"
+    },
+    {
+      "path": "tulip/performance-settings.json",
+      "size": 247,
+      "sha256": "6cb82fd51853000c72cea95e42b8836c182cb7c5175ba001e956465a3ca628a9"
+    },
+    {
+      "path": "tulip/prefix-attention-fp8-proof-20260918.json",
+      "size": 2199,
+      "sha256": "fdc72754e98222e0a5745ed3fed53106aacf1c1d04089582cb4139e362ff9eeb"
+    },
+    {
+      "path": "tulip/prefix-attention-proof-20260918.json",
+      "size": 866,
+      "sha256": "c85ebca75dcbf7dc94bcbab0fa3a877c10be66392d3584ea941e8cb89958d616"
+    },
+    {
+      "path": "tulip/prefix-kernel-tuning-20260918.json",
+      "size": 946,
+      "sha256": "f193da6494bbe12e160ae876d9ca2e5d6e9c4e811fa504c799fb6507ae6801c9"
+    },
+    {
+      "path": "tulip/presentation_benchmark.py",
+      "size": 2396,
+      "sha256": "421354a3d5553277ef9b3cdad2d6d31e58fd5bb6162a7efccc5948ae4250aebe"
+    },
+    {
+      "path": "tulip/presets/etherea-continuous-v2.json",
+      "size": 1209,
+      "sha256": "b0328cbed96e5e0af3b61e415322814be549de91ab3b924475a9e2945f70dd6e"
+    },
+    {
+      "path": "tulip/presets/etherea-coral-v1.json",
+      "size": 1136,
+      "sha256": "cf433eef33220ed9a178c96f4d502d636bdbcb3a3a4c18281c587176beceb84e"
+    },
+    {
+      "path": "tulip/probe-native.py",
+      "size": 3803,
+      "sha256": "bdee312b06018549ebd4a8dc5c89c6dfca4b5656a0e845020c4ccab6a3881b86"
+    },
+    {
+      "path": "tulip/probe-sage.py",
+      "size": 1731,
+      "sha256": "90d2c2213f5f719c97dd00cd619000886615c34ddb871935a5f692beec7da730"
+    },
+    {
+      "path": "tulip/probe_dlssg_live_context.py",
+      "size": 1579,
+      "sha256": "ff7f80cd381134d4bd4570403d520825ee6f6920c6ef4df4d7dc16353233d8ad"
+    },
+    {
+      "path": "tulip/probe_gpu_encoder.py",
+      "size": 1904,
+      "sha256": "5b76d8335fa433772dccd8adb7be1514848c6b947fc228cc1568ed1c023b2bcb"
+    },
+    {
+      "path": "tulip/probe_masked_attention.py",
+      "size": 1875,
+      "sha256": "c879edda8e7248476a0fbd7285cf2c1ad3bba8c08acd91decc9b938ad27cf8f5"
+    },
+    {
+      "path": "tulip/probe_prefix_sage.py",
+      "size": 1450,
+      "sha256": "d97c321f9f38a39c283b64e98e00983c95221d1441e860e045934bee93745fe5"
+    },
+    {
+      "path": "tulip/probe_vfx_vsr.py",
+      "size": 2049,
+      "sha256": "4e60764fb84b4c912671ba6f3c23a6ab4c13ae91757215391b782c5cb04ff3cd"
+    },
+    {
+      "path": "tulip/profile_vae_placement.py",
+      "size": 2968,
+      "sha256": "076fda45fe471b1deb158788f70296b9968e9710b120f5e9e2ab2357f171100f"
+    },
+    {
+      "path": "tulip/prompt-attention-probe-20260918.json",
+      "size": 1572,
+      "sha256": "aa85d1a34aa0be035345db2783fd24632f83802e239269b822427e3ae22bb89c"
+    },
+    {
+      "path": "tulip/prompt-audit-20260916.json",
+      "size": 15478,
+      "sha256": "09e71f8bfb4fe2b55751f0ea65ec80f4b2703d3bacfc2bb649512e66c53193b8"
+    },
+    {
+      "path": "tulip/quality-tuning-current.txt",
+      "size": 81,
+      "sha256": "8f8b015872b8751cf3c76e4741a86757c983a75f0287d90f381a8a54d1557795"
+    },
+    {
+      "path": "tulip/quality_benchmark.py",
+      "size": 8167,
+      "sha256": "3fb4619015a7013acf549688878d006f35f848675d3febabf9549e6f9f86aa22"
+    },
+    {
+      "path": "tulip/quality_session_trial.py",
+      "size": 2619,
+      "sha256": "c2f565dcddda42ac571e2f30686061b3767e25d186e0beb811c5602f757d055c"
+    },
+    {
+      "path": "tulip/quality_trial_lifecycle.py",
+      "size": 9613,
+      "sha256": "b1d375b011a219801bf39d4df406cf082270855b8f0f0139855d4d0ec9a07cd4"
+    },
+    {
+      "path": "tulip/reference-man-dog-20260915.jpg",
+      "size": 85048,
+      "sha256": "1e9caa228d24835b52b6ec21b9acdf55217c669f153cc5d7b44f975330d2315e"
+    },
+    {
+      "path": "tulip/reference-strength-current.txt",
+      "size": 85,
+      "sha256": "c116cb4f022dd96b880a2e27b0bd1bfa0f53b17539d02a068627a8c448fa92e2"
+    },
+    {
+      "path": "tulip/reference-trial-cue-output-20260915.png",
+      "size": 840171,
+      "sha256": "720015bc4dc24d1690013de31c57b3f5f19c4a23559b3eb944afd8a48e7c014f"
+    },
+    {
+      "path": "tulip/reference-trial-explicit-output-20260915.png",
+      "size": 710126,
+      "sha256": "295489c194cec7addb6dcf50f0ac094cfea7e4e2ceca6d0455e69776dca4b9c7"
+    },
+    {
+      "path": "tulip/reference-trial-output-20260915.png",
+      "size": 654485,
+      "sha256": "454a1f310ea59452441313836ff3e58a257c3a78b41e7b89697399c8d1c7fe09"
+    },
+    {
+      "path": "tulip/reliability_content_probe.py",
+      "size": 1364,
+      "sha256": "12de4da9155a2950b6fbbc958a1caaa42d9f064eed5c4eda79d657eaa30ae6c1"
+    },
+    {
+      "path": "tulip/report_4k_trial.py",
+      "size": 8815,
+      "sha256": "0faceb9032107abb96e31e8de0ee643418ced5d83ac19fd5714a79c1f0aefe25"
+    },
+    {
+      "path": "tulip/requirements-gpu-video.txt",
+      "size": 108,
+      "sha256": "d574275a1a9b75d97654221e30533e039e82c30c5d822f7eb29add268cf7cfa1"
+    },
+    {
+      "path": "tulip/requirements-windows.txt",
+      "size": 503,
+      "sha256": "481ec92fd252195b039b8b3b533104fd1f1f136e3d66130fd340852e831f28b3"
+    },
+    {
+      "path": "tulip/restart_cache_fix.py",
+      "size": 4039,
+      "sha256": "e25a071e8279ac2642e027000ba612f8485671e67eeabbafada7916091f50489"
+    },
+    {
+      "path": "tulip/restart_oom.py",
+      "size": 3285,
+      "sha256": "bde09ee43a1af6a105176a5cbb8cc6b334d175dfb2456b473e6a024ea1f36487"
+    },
+    {
+      "path": "tulip/restart_sink_decay.py",
+      "size": 3706,
+      "sha256": "ce3656fce762c4aa5b9cbc6ba86e00b128870b1f17054d35c522c67e103a3657"
+    },
+    {
+      "path": "tulip/restore_favorite.py",
+      "size": 4492,
+      "sha256": "60591cfc723ac16c5a2b0ac2fb7e82ca75ed4c1316ec0ba7af24b268a9576ed6"
+    },
+    {
+      "path": "tulip/restore_shader_handoff.py",
+      "size": 3154,
+      "sha256": "528ee865a35c189169d0c880d4947ed9d16e43e9903eac6b3e3c203e3b5b5577"
+    },
+    {
+      "path": "tulip/restored-handoff-current.txt",
+      "size": 89,
+      "sha256": "d636b8ed93ea04c647b044f9b4c7e1d303da88f18d890e76426bea16c0576588"
+    },
+    {
+      "path": "tulip/review-video.py",
+      "size": 3331,
+      "sha256": "08cccd92e91c61fbb717684b59e2ba1961d75c40ee8a5863ff586e19d9364c2f"
+    },
+    {
+      "path": "tulip/rife-headroom-evidence.txt",
+      "size": 80,
+      "sha256": "128e31b3146a3fc736f1df3e4b5e982e32ebd5307f76d2774ecfd7143a265b09"
+    },
+    {
+      "path": "tulip/rife-selection-evidence.txt",
+      "size": 80,
+      "sha256": "9955c63cd01dc03708769bbc0016a7b85448c11dea8a3f6a26071fac40a5d51a"
+    },
+    {
+      "path": "tulip/rtmp_delivery_probe.cjs",
+      "size": 1686,
+      "sha256": "7977ff585190758fa9e494d86286eda1e269e1307109a0561463412d260cff15"
+    },
+    {
+      "path": "tulip/run-cache-ab.ps1",
+      "size": 1092,
+      "sha256": "484a21afdca5d3054e7e20491dfd27e8d8233632aea1f20ac61612cae6638f8b"
+    },
+    {
+      "path": "tulip/run-service.ps1",
+      "size": 5923,
+      "sha256": "37727f273348c8878d9d05d0b94bd6fa9d954573ee0e7b09ff0c35dd69faafbb"
+    },
+    {
+      "path": "tulip/run-trial.ps1",
+      "size": 2137,
+      "sha256": "018aced900c040834dbfd69b30cdd25070d7d38aa31e1e4adaeeba90b1d16ddd"
+    },
+    {
+      "path": "tulip/runtime-settings.json",
+      "size": 28,
+      "sha256": "abb5bb29afdf4a92016a50c4b25d4daf76e703c0bed5b9a001c9472667bd5f05"
+    },
+    {
+      "path": "tulip/runtime-settings.ps1",
+      "size": 1676,
+      "sha256": "854b993548544475014b2dce311ebd621d4495cdc9734332d42410c1b6417c84"
+    },
+    {
+      "path": "tulip/sage-probe.json",
+      "size": 326,
+      "sha256": "455f3cddc8115b03e8c097d4456e430be947b67fe1ecb746799ceeef61412df8"
+    },
+    {
+      "path": "tulip/scene-transition-fixed-contact-20260915.png",
+      "size": 1423951,
+      "sha256": "fc8833d9787201895710bfde646ba1f51619af50a1ae9c1a315cd1f8d95c80d2"
+    },
+    {
+      "path": "tulip/select_upscaler.py",
+      "size": 936,
+      "sha256": "f545b138860e705c2ce20418f0aa25fd7022163365683dc27809e208408180fa"
+    },
+    {
+      "path": "tulip/serve.py",
+      "size": 6409,
+      "sha256": "b90931c0cd0538b59a82a161cb0e36613cf82e641ec6d2dfcc5d370a0e843d35"
+    },
+    {
+      "path": "tulip/set-neural-rendering.ps1",
+      "size": 666,
+      "sha256": "f1978063c96a7d210603908e3a90441b1f5be942b75e9843e6aa86ca4cb5116e"
+    },
+    {
+      "path": "tulip/set_interpolation_backend.py",
+      "size": 945,
+      "sha256": "eba5a816d534a634f1205fcb844f04e35d8316f27dc7a03504d182c183111b7e"
+    },
+    {
+      "path": "tulip/set_rife_gpu.py",
+      "size": 729,
+      "sha256": "cc73c398e1af83985002e1de221631de1660c3c36ca45ffaad75fb4869e1a5ad"
+    },
+    {
+      "path": "tulip/shader-strength.json",
+      "size": 62,
+      "sha256": "c844799b450d1f312f4067d493fb64a1bfa3f5d2cf9effb5eb2d02812c4c5ede"
+    },
+    {
+      "path": "tulip/shared_vae_trial.py",
+      "size": 1407,
+      "sha256": "38358fd68b5ee15ec31973936f6c6d90ae60258c8171816ca8c60f168ebb643f"
+    },
+    {
+      "path": "tulip/source-frame.png",
+      "size": 136205,
+      "sha256": "2084e5198ad4d7380602a263182bf9ce4810343b8831986b1be485ba80e03193"
+    },
+    {
+      "path": "tulip/sr_graph_repair.py",
+      "size": 1580,
+      "sha256": "41dc6f058ffd5b2306411f0dabb6877533807432ffa966a42779f6a70d314ae9"
+    },
+    {
+      "path": "tulip/sr_graph_trial.py",
+      "size": 1413,
+      "sha256": "b34bbb7e4caf3d2c75db868ed830ff97da81b1af094e878804bbc1df7b200e0e"
+    },
+    {
+      "path": "tulip/stage-profile.json",
+      "size": 19,
+      "sha256": "5e453180be18e5dbdd70b7ea2e344ac5bce8b925b667188c3651c5cb7ab1890c"
+    },
+    {
+      "path": "tulip/streaming-window-benchmark-20260916.json",
+      "size": 798,
+      "sha256": "0eb0d0d35a6b5d711974059703c5a2532e6c756d90114d359a8b6baf32e3979d"
+    },
+    {
+      "path": "tulip/strength-comparison.ps1",
+      "size": 730,
+      "sha256": "fd547149f675af7b8e17e14d74764f11debaa4eace2ccdedeb27d6dcb9eddf43"
+    },
+    {
+      "path": "tulip/strength-fine-jobs.json",
+      "size": 11053,
+      "sha256": "d59eafc7bc76edf286c80d2887411adef748b340cb998b914d975a69d23d4cc2"
+    },
+    {
+      "path": "tulip/strength_controls.py",
+      "size": 1793,
+      "sha256": "4e7625a47851b93fce17f550fb2ab31ffc11304088a20ee686ca7950a9349e8c"
+    },
+    {
+      "path": "tulip/summarize-trial.py",
+      "size": 2758,
+      "sha256": "0b30a1c46c09bd3ee977d88db6be64db268e244b79719819632c383ad0d41e36"
+    },
+    {
+      "path": "tulip/summarize_padded_prompt.py",
+      "size": 2347,
+      "sha256": "925610770742d31c13edf39dbf887cf13fdfcae1e00e88382a3e408c9153ec06"
+    },
+    {
+      "path": "tulip/summarize_quality_trial.py",
+      "size": 2646,
+      "sha256": "b9acb7f30f4f479a0f0bf8b403b3c29e01b46317e5b7b3ac3742f2e35d36c0fe"
+    },
+    {
+      "path": "tulip/summarize_rife_gpu_live.py",
+      "size": 3495,
+      "sha256": "cef8e5d52b551062e11538c45e282b850e86cefa2ff2eed4c744cc6a803a794f"
+    },
+    {
+      "path": "tulip/summarize_vsr_trial.py",
+      "size": 2051,
+      "sha256": "dbc394ad504c6d91fe23dcd41a5866a04553ceaea215cbda95e35cc37339f242"
+    },
+    {
+      "path": "tulip/test-runtime-settings.ps1",
+      "size": 3192,
+      "sha256": "d2f933ed04138fce3af8dc097c589511b0df7b491e3bb3d9fa0bf98fea1e5afa"
+    },
+    {
+      "path": "tulip/test_cache_decay.py",
+      "size": 7617,
+      "sha256": "53ee6bbd9413b6a4f9262d712d504d834cb5529a0a53987c68c6552a60cc6327"
+    },
+    {
+      "path": "tulip/test_compact_prompt_graph.py",
+      "size": 1892,
+      "sha256": "d1e4a2e7feed47e4571bce630e00865f21ea7d81057eacaa4a5fa040267bfe8d"
+    },
+    {
+      "path": "tulip/test_decode_warmup.py",
+      "size": 1415,
+      "sha256": "96a65238750e420dab77a960e2f364a20c686c390dd6b9d9b68b39d828b3dd2d"
+    },
+    {
+      "path": "tulip/test_direct_ndi_output.py",
+      "size": 16013,
+      "sha256": "d28827d952c38f59cf7b15c41bdf175e80d695afd8c66be7d33d719189048518"
+    },
+    {
+      "path": "tulip/test_encoder_status.py",
+      "size": 1290,
+      "sha256": "0c67228ba00e3955909870f7baaf34b5f1f9335c0f7a9c7d1b8d6df7275ab358"
+    },
+    {
+      "path": "tulip/test_fixed_prompt_graph.py",
+      "size": 4711,
+      "sha256": "5f2cfceedae569b1a8956d59e71206156fff48b6273cbc0a8ca6b6e79fdaa2d8"
+    },
+    {
+      "path": "tulip/test_fp8_prefix_rows.py",
+      "size": 1402,
+      "sha256": "9d1f9794ac0137159b39d213d174ddd5bfce8392e9b5714069e9a58c137b3a88"
+    },
+    {
+      "path": "tulip/test_gpu_video_output.py",
+      "size": 6946,
+      "sha256": "4cc6bec1cdc8f0535ea32c7b434d0f7a4e2f7d09268eac13358f7880885c748c"
+    },
+    {
+      "path": "tulip/test_history_noise.py",
+      "size": 7253,
+      "sha256": "7b8dd13f80f2b860ed1d4cae2463d57945499a26676dab504c4694c8ab574cda"
+    },
+    {
+      "path": "tulip/test_interpolation_backend.py",
+      "size": 2575,
+      "sha256": "3ac8c15a8173dd3f9f42433f7d84ea53c2ba5a21d8d48842d436b8c8fdbd3bf8"
+    },
+    {
+      "path": "tulip/test_live_shader_bridge.py",
+      "size": 1444,
+      "sha256": "0b9859f202862b37a604ae284c7c051d8f7e7feeefb44dfad50fbd2435ddbc4f"
+    },
+    {
+      "path": "tulip/test_memory_status.py",
+      "size": 1868,
+      "sha256": "b852ae156cca650aa6d360f471e3896a8ce5fc0da800519c6c30a414433dea9f"
+    },
+    {
+      "path": "tulip/test_native_capture.py",
+      "size": 3333,
+      "sha256": "c776ad018f115fa437316b7319eda7eeb2e7c15648d8991ca57727f45d6a4212"
+    },
+    {
+      "path": "tulip/test_native_quality.py",
+      "size": 1188,
+      "sha256": "4f48775c79317cbc83d5cc1a67e95e53fc63adab615118f244bfac5527ad9f1e"
+    },
+    {
+      "path": "tulip/test_neural_rendering_live.py",
+      "size": 2041,
+      "sha256": "64c672e1b2d117f506a4c9d73a7f41b516288cd0bc8a3f4f5182a6fe3ae065cc"
+    },
+    {
+      "path": "tulip/test_no_automatic_rollback.py",
+      "size": 1986,
+      "sha256": "0455fd0e0aeb4b96cb3bdb5518cb902d6c187dcc5506bedd63a079593369e24c"
+    },
+    {
+      "path": "tulip/test_output_consumer.py",
+      "size": 1950,
+      "sha256": "cb42c382baf63345e6fffb07f2ffc1d5771da08e8afedd20ba1d223bfad8e4aa"
+    },
+    {
+      "path": "tulip/test_output_geometry.py",
+      "size": 4671,
+      "sha256": "f3d6c3f54002711ebddec312a69a00a69ab502b05146912c42376db6593966e7"
+    },
+    {
+      "path": "tulip/test_output_upscalers.py",
+      "size": 2135,
+      "sha256": "30029f535234bcbcc96330d87e03c3e283658f0e099ac12ddd20037b51f6e788"
+    },
+    {
+      "path": "tulip/test_presentation_activity.py",
+      "size": 2319,
+      "sha256": "a248d4a60b4cadf85ce59c114201bfb09c7e930d296b8f07a55f317d676d3028"
+    },
+    {
+      "path": "tulip/test_presentation_pipeline.py",
+      "size": 1880,
+      "sha256": "d4840aa7787add53a2998c22851c4a08fb63c97d743e94fb6655a33224314126"
+    },
+    {
+      "path": "tulip/test_progressive_upscale.py",
+      "size": 3006,
+      "sha256": "be7d9bbe228b37353a875aa1adb88286736520222f465e52a020bed53b3173dc"
+    },
+    {
+      "path": "tulip/test_rife_output.py",
+      "size": 2506,
+      "sha256": "bbc5fc63a925f6d549a03fd22943d76f14a3901333ee197f8e63e98a66d82c2d"
+    },
+    {
+      "path": "tulip/test_session_cache_teardown.py",
+      "size": 3441,
+      "sha256": "3e052c491f00e09e35f224221bffdd2182d945ad2b066155b531dc4b4949118d"
+    },
+    {
+      "path": "tulip/test_session_watchdog.py",
+      "size": 2277,
+      "sha256": "2fb68955fc5e2f538947fd61f5ceb601a16a5ca959c87f58c9b385cc3a07da80"
+    },
+    {
+      "path": "tulip/test_shader_dial.py",
+      "size": 8687,
+      "sha256": "626bdc0c7571aeb1fccaa5c5e3a87c8b9f75e4908ffd7dffd266ec1b74c0f2cb"
+    },
+    {
+      "path": "tulip/test_shader_presentation.py",
+      "size": 2741,
+      "sha256": "82bbbd17a7ca461f74d6fa63f3f7601e7d18ebf7222e0c42eec28f44a1b29f22"
+    },
+    {
+      "path": "tulip/test_shader_presentation_gpu.py",
+      "size": 1334,
+      "sha256": "de912124e7c955c0704dc7a9442db7492fb9d48162727688b088f027712471c7"
+    },
+    {
+      "path": "tulip/test_shared_vae_stream.py",
+      "size": 3860,
+      "sha256": "fd90a5357eb334d0d154be249db459ecf0af8bc23fb2f110102f8a7fd26928bb"
+    },
+    {
+      "path": "tulip/test_stage_timings.py",
+      "size": 2605,
+      "sha256": "c6fffa570682ffb532a54f6e3e4a488829f92bea38143c7323da74752f8b130b"
+    },
+    {
+      "path": "tulip/test_stream_controls.py",
+      "size": 10194,
+      "sha256": "1578c3afae4d7d974a4e9205deee44ca9f64090fce6fac15f742f3de707f1ed1"
+    },
+    {
+      "path": "tulip/test_streaming_window_lookup.py",
+      "size": 3611,
+      "sha256": "362303804dac424b6f9bd2b288cc7ff49fdaabecdf364a67c7f1fd37704d1cf2"
+    },
+    {
+      "path": "tulip/test_strength_controls.py",
+      "size": 1964,
+      "sha256": "a4e7970900a602ab24d9c17a3a021dc7dc60d9fac04ed93a1491407a57a4c0f6"
+    },
+    {
+      "path": "tulip/test_upscale_pipeline.py",
+      "size": 2889,
+      "sha256": "47997e0fe8b83465688240b81ef4e40b973cff2fb6dc1708bb7974b8b0393a71"
+    },
+    {
+      "path": "tulip/test_vae_compile_policy.py",
+      "size": 1237,
+      "sha256": "498cb725d41228a7811ee923a3ec4b394937cbc16b55552234e83c9c1219cb5f"
+    },
+    {
+      "path": "tulip/trial.py",
+      "size": 8317,
+      "sha256": "edb5b039a7cc624241922b7c8e49b6155a2b6956959a30d7c605f1715c8e1b0e"
+    },
+    {
+      "path": "tulip/trial_4k_output.py",
+      "size": 10671,
+      "sha256": "39fd8fdbbbd9a21c3b0ca00411285406f5234d7c239e029c1c320b2f2ac921ba"
+    },
+    {
+      "path": "tulip/tune_prefix_kernel.py",
+      "size": 2494,
+      "sha256": "e3b6ef9f5c99bd599efb6ff59b018748e20a4ffd7a42d6ae893d8e69fa0dd1e1"
+    },
+    {
+      "path": "tulip/upscale_compare.py",
+      "size": 2174,
+      "sha256": "7e17106e0d8f8097436b6c4fa12f542e883d54c71766905714d13702f267a03a"
+    },
+    {
+      "path": "tulip/upscale_live_trial.py",
+      "size": 7887,
+      "sha256": "5962bc4cf20e5bee01d554d8d7a23ddf803f4cee683f3be8a279474b67973f65"
+    },
+    {
+      "path": "tulip/upscale_trial.py",
+      "size": 13692,
+      "sha256": "263bf9b8869f65917dedf7ae8618f293fbd8fda8aa17b5e97f191399a04fd983"
+    },
+    {
+      "path": "tulip/validate_gpu_publisher.py",
+      "size": 2488,
+      "sha256": "1c9bca9dc43e3ba6af040cce23f4576e98cf9a52de4af69a3f537c3ef42e6285"
+    },
+    {
+      "path": "tulip/validate_gpu_video.py",
+      "size": 2342,
+      "sha256": "f42fdf09bb4b651dc77e79671e0ee2a011f5a7b21f9c8fd7642f693542999f61"
+    },
+    {
+      "path": "tulip/verify_648_session_replacement.py",
+      "size": 1789,
+      "sha256": "7dbdcf1757f0941d9ffac011853f8b9f7e1076a64a8cf98c8cdcbbb193584905"
+    },
+    {
+      "path": "tulip/verify_dlssg_gpu.py",
+      "size": 3221,
+      "sha256": "b995f4280cf6bbc21c7cfbfb570337fc576ad7a8f87aa4f9673e4003b91b0f84"
+    },
+    {
+      "path": "tulip/verify_dlssg_live_adapter.py",
+      "size": 2917,
+      "sha256": "7043500c1100ba0da167392c6641fd243f94706737d32261832948c0440e9d75"
+    },
+    {
+      "path": "tulip/verify_fixed_prompt_fp8_gpu.py",
+      "size": 2759,
+      "sha256": "c96cc552ed549a3acdca043396493f7d1e61847d91262c1f150d76ef60ab4119"
+    },
+    {
+      "path": "tulip/verify_fixed_prompt_gpu.py",
+      "size": 2712,
+      "sha256": "e65c0f212e1c9aa2f48eed4aba56429f5f38c3bb861b64da9fb44b2d36ba3b5c"
+    },
+    {
+      "path": "tulip/verify_fp8_prefix_gpu.py",
+      "size": 4044,
+      "sha256": "cc83ee5ad8bfd4e3dc5deb12ebf9537489727032542180b2fcfbb0b301f6b3f9"
+    },
+    {
+      "path": "tulip/verify_fp8_prefix_streaming.py",
+      "size": 5355,
+      "sha256": "d91de712f56a8096109b300ab8c764e5d41391c4001ab8a543e9d678a8b84d8c"
+    },
+    {
+      "path": "tulip/verify_prefix_attention.py",
+      "size": 7255,
+      "sha256": "d09fe397774d282853389f7f4495fe8054ec6b7d906a0388181e35b20e03ac75"
+    },
+    {
+      "path": "tulip/verify_rife_gpu.py",
+      "size": 2867,
+      "sha256": "8123802e89d40d4e70da0ce2e74cd8bd93bcda9d9feed31dc00649bc1f4e1e9b"
+    },
+    {
+      "path": "tulip/verify_rife_gpu_presentation.py",
+      "size": 4782,
+      "sha256": "43db9da348c8fac689c699da33014c196dafc3d66df72aa9dc1db3903aa2c7a1"
+    },
+    {
+      "path": "tulip/verify_rife_gpu_toggle.py",
+      "size": 2096,
+      "sha256": "13dfe658b68344ae88bef3803af6607ba41f24435eaf3edc13e670deba3ec074"
+    },
+    {
+      "path": "tulip/verify_sr_graph.py",
+      "size": 1852,
+      "sha256": "6612cb4a2d86599fc84f659b286c61fbd1ee854a77ee39aa87532af57ce8ad0f"
+    },
+    {
+      "path": "tulip/verify_vae_warmup_devices.py",
+      "size": 1158,
+      "sha256": "8dcc6daa13c4d7805d0f640871b6c2a9f2bcf6d6bb9d4d3c7d43961e3ef4b90a"
+    },
+    {
+      "path": "tulip/verify_vsr_output.py",
+      "size": 2404,
+      "sha256": "3849a1c776e21f5efe18db784002d1efa9305ff091cb412a3dfd14b319ed33a7"
+    },
+    {
+      "path": "tulip/vsr_live_trial.py",
+      "size": 2146,
+      "sha256": "97027ca59e4221ea7e8e4d656768f97c95f83a20c7f042e4385e57bece9d2613"
+    }
+  ]
+}

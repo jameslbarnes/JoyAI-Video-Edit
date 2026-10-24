@@ -1,6 +1,76 @@
-# Combined shader control - September 26, 2026
+# Shader influence v2 - October 21, 2026 (activated)
 
-The current opt-in `combined` mode coordinates reference conditioning, starting
+`influence` is an explicit opt-in mode. The phone and desktop send the same
+0..1 dial value; only the model applies a response curve. Reference gain is
+`min(2*value, 1)`; starting latent blend is `.1*max(0, 2*value-1)^2`.
+The upper half reaches useful input blends earlier than the old fourth-power
+curve. This is not a claim of perceptually uniform response. Scene history is
+preserved; a dial move does not reset generation or recapture a graph.
+
+Raw-shader presentation is separate: `POST /shader-overlay {"value": 0..1}`
+or WebSocket `set_shader_overlay`. Its saved `outputMix` is independent of
+influence and defaults to zero. The existing display mixer still ramps across
+native frames. Changing overlay does not change inference/history tensors.
+
+The desktop exposes a separate Raw shader overlay slider. The SDK exposes
+`model.primary.shader.overlay.set` (CLI `model primary shader-overlay --value
+VALUE --dry-run|--live`). Existing phone strength gestures need no new protocol:
+SDK capabilities retain the installed client's `quadratic` discriminator but
+set exponent **1** and maximum **1**. This is intentionally identity mapping;
+renaming the discriminator to `linear` would trigger older clients' fallback.
+The existing phone does not yet expose the new independent overlay control.
+
+Every accepted model strength/overlay command is atomically saved before its
+target/revision is published. Failed flush/replace leaves the old file and live
+setting intact and returns an error. Disk writes use a control lock, never the
+frame-state lock. The WebSocket writer keeps one in-flight command and at most
+one pending command for each control, replacing older unsent gestures. It runs
+outside the video receive loop, acknowledges persisted commands with request IDs,
+and owns any in-flight write through disconnect. HTTP handlers use FastAPI's
+worker thread pool. A successful acknowledgement promises the **saved target**,
+not that chunk smoothing has already settled.
+
+Deployment must capture current live `/strength`, wait for settled state, and
+use `migrate_strength_state`. It preserves reference gain, latent blend and raw
+overlay; it rejects unrepresentable legacy blends rather than clamping them.
+Do not use a stale startup file or the old displayed phone percentage. The
+displayed number changes because its units change. Legacy modes remain available
+for rollback. Activation needs approval before a model restart; staging code or
+passing CPU tests does not establish live visual/cadence acceptance.
+
+CPU validation: `tulip.test_shader_dial` and
+`tulip.test_shader_strength_persistence`, also included in the sibling
+`npm run test:video` suite. After approved activation, verify actual settings
+after reload, SDK identity metadata, slider acknowledgements and the full live
+cadence gate at unchanged artwork, quality and projector refresh. Compare
+steady and deliberate-transition intervals separately. No automatic recording.
+
+The approved October 21 activation migrated the live combined dial while
+preserving its actual gain, blend and overlay. SDK and desktop controls passed
+durable-write/readback checks; a rapid desktop drag coalesced to the final value
+without resetting the scene. The 120-second steady gate passed at 24.00 fps
+with no new publisher drops or underruns. A later observation during external
+control/scene changes caught a 287 ms receiver gap and an RTMP diagnostic-reader
+disconnect; it is retained as a failed run. A subsequent 150-second controlled
+run at the newer operator setting passed all three same-prompt resets at
+24.00 fps with no new drops or underruns, unchanged influence/overlay, and a
+54 ms maximum projector CPU-submission gap. This does not resolve or erase the
+earlier intermittent transition hitch or certify physical display scanout.
+The subsequent hands-off 300-second verification kept the same strength
+revision throughout and had no publisher drops/underruns or decoder errors,
+but failed on one skipped source ID. An 87.8 ms receiver gap overlapped a
+63.0 ms Easel `screenshots-network` render-thread span. That combined marker
+does not identify which enclosed call blocked; no screenshot was captured.
+Keep this failed long run alongside the shorter passes. The shader control's
+stability is established for these samples, not universal jitter elimination.
+Do not restore the migration's old value over newer operator changes. Existing
+phone metadata is compatible, but physical-phone gesture/visual response has
+not been independently verified. Evidence is in the machine-local
+`etherea/incidents/20261021-shader-strength-fix/activation` directory.
+
+# Historical combined shader control - September 26, 2026
+
+The legacy opt-in `combined` mode coordinates reference conditioning, starting
 latent blend, and a display-only shader fade. Initial curve:
 
 | Dial | Reference gain | Starting blend | Shader display mix |

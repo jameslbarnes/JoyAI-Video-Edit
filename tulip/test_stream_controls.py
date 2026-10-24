@@ -32,6 +32,8 @@ def control():
     c._latest_source_frame = {"anchor": 1}
     c._encode_prompt_value = lambda text, anchor: torch.ones(1, len(text), 2)
     c.prompt = c.raw_prompt = "old"
+    from xvideo.serving.prompt_timing import PromptTiming
+    c.prompt_timing = PromptTiming('old')
     c.device = "cpu"
     c.target_dtype = torch.float32
     c._prompt_status = "idle"

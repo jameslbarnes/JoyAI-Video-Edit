@@ -15,8 +15,10 @@ import numpy as np
 
 
 class DirectNdiPublisher:
-    def __init__(self, host='127.0.0.1', port=7780, max_frames=48, prime_s=.35, retry_s=2.0, send_timeout_s=2.0):
+    def __init__(self, host='127.0.0.1', port=7780, max_frames=48, prime_s=.35, retry_s=2.0, send_timeout_s=2.0,
+                 sender_id='primary-joyai', name='ETHEREA JoyAI'):
         self.address = (host, port)
+        self.sender_id, self.name = sender_id, name
         self.max_frames, self.prime_s = max_frames, prime_s
         # A transport error used to latch forever (one slow bridge read at restart
         # killed NDI for hours). Errors now retry after retry_s; a full 1944x1080
@@ -47,7 +49,7 @@ class DirectNdiPublisher:
                         error=self.error, last_error=self.last_error, reconnects=self.reconnects, sent=self.sent, dropped=self.dropped,
                         queued=len(self.frames), max_frames=self.max_frames,
                         last_send_at=self.last_send_at, last_send_ms=self.last_send_ms,
-                        geometry=self.geometry, sender_id='primary-joyai',
+                        geometry=self.geometry, sender_id=self.sender_id,
                         transition_phase=('waiting' if self.transition['reset'] else 'fade-out') if self.transition else None,
                         transition_frames=self.transition_frames, transitions_completed=self.transitions_completed,
                         scene_discarded=self.scene_discarded,
@@ -227,7 +229,7 @@ class DirectNdiPublisher:
         sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self.socket = sock
         width, height, fps = key
-        hello = dict(senderId='primary-joyai', name='ETHEREA JoyAI', width=width,
+        hello = dict(senderId=self.sender_id, name=self.name, width=width,
                      height=height, fps=fps, frameRateN=round(fps * 1000),
                      frameRateD=1000, sourceType='joyai-direct')
         sock.sendall((json.dumps(hello) + '\n').encode())

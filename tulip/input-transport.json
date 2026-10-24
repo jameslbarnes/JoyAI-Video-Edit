@@ -1,0 +1,5 @@
+{
+  "transport": "spout",
+  "source": "Easel - FLUX-IN",
+  "device": "cuda:0"
+}
