@@ -2,6 +2,14 @@
 
 ## Live Spout recovery
 
+Sender creation explicitly pushes the CUDA context belonging to its RGBA tensor,
+then restores the caller's context. Cached `torch.empty` allocations do not prove
+a context is current after native sender teardown. CPU regression:
+`python -m unittest tulip.test_spout_cuda_context` with `PYTHONPATH=deploy`.
+The October 24 GPU context probe also verified recovery from an empty current
+context and balanced restoration. This changes sender initialization only;
+frame preparation, presentation clocks and quality settings are unchanged.
+
 JoyAI and Easel must run in the same interactive Windows session. Before any
 Spout model launch, verify both process SessionIds. A backend running in Session
 0 cannot launch a working desktop Spout reader; `run-service.ps1` now refuses

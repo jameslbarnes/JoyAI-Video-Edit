@@ -1,5 +1,6 @@
 """GPU-only local presentation. Native code owns the texture ring and clock."""
 import ctypes
+from contextlib import contextmanager
 from collections import OrderedDict
 import uuid
 from pathlib import Path
@@ -12,6 +13,31 @@ import torch
 from .direct_ndi_output import DirectNdiPublisher
 from .gpu_video_output import GpuFrame, GpuVideoPublisher
 from .feeder_trace import FeederTrace
+
+
+@contextmanager
+def tensor_cuda_context(tensor, driver=None):
+    """Bind the allocation's context even when the caching allocator did no CUDA work."""
+    driver = driver or ctypes.WinDLL('nvcuda')
+    driver.cuPointerGetAttribute.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_uint64]
+    driver.cuCtxPushCurrent_v2.argtypes = [ctypes.c_void_p]
+    driver.cuCtxPopCurrent_v2.argtypes = [ctypes.POINTER(ctypes.c_void_p)]
+    context = ctypes.c_void_p()
+    # CU_POINTER_ATTRIBUTE_CONTEXT identifies the actual allocation's device;
+    # do not assume the process's default GPU or a visible-device ordinal.
+    result = driver.cuPointerGetAttribute(ctypes.byref(context), 1, tensor.data_ptr())
+    if result or not context.value:
+        raise RuntimeError(f'Cannot resolve Spout allocation CUDA context ({result})')
+    result = driver.cuCtxPushCurrent_v2(context)
+    if result:
+        raise RuntimeError(f'Cannot bind Spout allocation CUDA context ({result})')
+    try:
+        yield
+    finally:
+        previous = ctypes.c_void_p()
+        result = driver.cuCtxPopCurrent_v2(ctypes.byref(previous))
+        if result:
+            raise RuntimeError(f'Cannot restore Spout CUDA context ({result})')
 
 
 class NativeStats(ctypes.Structure):
@@ -276,9 +302,11 @@ class GpuSpoutPublisher(DirectNdiPublisher):
                             if self.native:
                                 self.dll.jsp_close(self.native)
                             w, h, fps = next_key
-                            # Ensure the output CUDA primary context is current.
                             rgba = torch.empty((h, w, 4), dtype=torch.uint8, device=self.device)
-                            self.native = self.dll.jsp_create(self.name.encode(), w, h, fps, self.native_capacity, 12)
+                            # torch.empty may reuse cached memory without making a
+                            # CUDA context current after a native sender teardown.
+                            with tensor_cuda_context(rgba):
+                                self.native = self.dll.jsp_create(self.name.encode(), w, h, fps, self.native_capacity, 12)
                             if not self.native:
                                 raise RuntimeError(self.dll.jsp_error(None).decode())
                             key = self.geometry = next_key
